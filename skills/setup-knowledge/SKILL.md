@@ -1,5 +1,5 @@
 ---
-name: setup
+name: setup-knowledge
 description: >
   Bootstrap the knowledge-engine plugin — install qmd, create collection,
   embed vectors, create MCP venv, verify connectivity.

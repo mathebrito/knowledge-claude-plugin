@@ -5,7 +5,7 @@ description: >
   Identifies core claims, patterns, tensions, anti-patterns, and implementation
   ideas, then creates atomic notes with proper frontmatter and wikilinks.
   Uses qmd for duplicate detection before creating notes.
-version: 1.1.0
+version: 1.2.0
 author: knowledge-engine plugin (adapted from arscontexta/reduce)
 ---
 
@@ -50,15 +50,33 @@ original from disk. Always follow this order:
     - Uploads the file to the Knowledge API via multipart HTTP
     - Stores the original in MongoDB (Binary inline, up to 15MB)
     - Creates embeddings in Qdrant
-    - Auto-generates a Layer 1 RAG Ficha in `B.TEJO/knowledge/`
+    - Auto-generates a Layer 1 RAG Ficha in `B.TEJO/knowledge/` (server-side)
+    - Indexes ficha summary content in Qdrant (as additional searchable chunks)
     - May delete the original from disk (files under `~/knowledge/` only; vault files are preserved)
+4. **Sync vault**: Run `git -C ~/second-brain pull --rebase` to pull the Layer 1
+   ficha generated on the Mac Mini to the local vault.
+5. **Verify Layer 1 Ficha**: Call `mcp__knowledge__knowledge_summary` with the
+   returned `document_id`. Confirm `summary` and `key_findings` are populated.
+   If summary is empty, the summarization LLM may have failed — wait 30s and
+   retry once. If still empty, note it and continue (claims extraction will
+   compensate).
 
 ### Phase 2.5: Create Wiki Ficha (Layer 2 Bridge)
 
-**CRITICAL:** Before extracting individual claims, create a "Wiki Ficha" in `~/second-brain/A.DIVA/wiki/ficha-<slug>.md`.
-- `type: ficha`
-- `source: "[[ficha-<doc_id>]]"` (Link to the Layer 1 RAG ficha)
-- `description`: 1-2 sentence summary.
+The Knowledge API auto-generates a **Layer 1 RAG Ficha** in `B.TEJO/knowledge/`
+with summary, key findings, and metadata. The reduce skill creates a separate
+**Layer 2 Wiki Ficha** in `A.DIVA/wiki/` that links to the Layer 1 and serves
+as the wiki-layer bridge for atomic claims.
+
+1. **Check if Layer 1 ficha exists**: Look for `~/second-brain/B.TEJO/knowledge/<slug>.md`.
+   If found, read its frontmatter to get `document_id`, `summary`, `collection`.
+2. **Create Wiki Ficha** in `~/second-brain/A.DIVA/wiki/ficha-<slug>.md`:
+   - `type: ficha`
+   - `source: "[[<layer1-ficha-filename>]]"` (wikilink to the Layer 1 RAG ficha)
+   - `document_id: "<doc_id>"` (from API response or Layer 1 frontmatter)
+   - `description`: 1-2 sentence summary (can reuse from Layer 1 if available).
+3. **Skip if exists**: If the wiki ficha already exists, do not overwrite — just
+   verify the wikilink to Layer 1 is correct.
 
 ### Phase 3: Categorize & Extract
 

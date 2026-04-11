@@ -56,7 +56,7 @@ source: "[[source-note]]"
 domain: tech
 moc: "[[MOC-Tech]]"
 agent: DIVA
-model: claude-opus-4-6
+model: claude-sonnet-4-6
 provider: anthropic
 ---
 ```

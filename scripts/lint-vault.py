@@ -60,12 +60,20 @@ def parse_frontmatter_simple(filepath: Path) -> dict:
 
 
 def check_broken_wikilinks(wiki_dir: Path, all_notes: dict) -> list[dict]:
-    """Find wikilinks pointing to non-existent notes."""
+    """Find wikilinks pointing to non-existent notes.
+
+    Only scans files inside wiki_dir for broken links (source scope),
+    but resolves targets against the full vault index (all_notes).
+    """
     issues = []
-    for name, filepath in all_notes.items():
+    wiki_notes = find_all_notes(wiki_dir)
+    for name, filepath in wiki_notes.items():
         links = extract_wikilinks(filepath)
         for link in links:
             target = link.split("#")[0].strip()
+            # Skip placeholders and template syntax
+            if not target or "<" in target or "%" in target:
+                continue
             if target and target not in all_notes:
                 issues.append({
                     "check": "broken_wikilink",
@@ -156,7 +164,10 @@ def check_ficha_rag_sync(wiki_dir: Path, all_notes: dict) -> list[dict]:
 def run_lint(output_json: bool = False) -> dict:
     """Run all lint checks and return report."""
     wiki_dir = VAULT_ROOT / "A.DIVA" / "wiki"
-    all_notes = find_all_notes(wiki_dir)
+    # Index notes from entire vault (not just wiki) so wikilinks to
+    # B.TEJO/knowledge fichas, B.TEJO/devops stubs, etc. resolve correctly.
+    # But only scan wiki/ for broken link sources (other dirs have templates/scripts).
+    all_notes = find_all_notes(VAULT_ROOT)
 
     report = {
         "date": datetime.now().strftime("%Y-%m-%d"),

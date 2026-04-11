@@ -14,12 +14,15 @@ import asyncio
 import json
 import logging
 import os
+import subprocess
 import sys
+from pathlib import Path
 
 import httpx
 
 API_URL = os.getenv("KNOWLEDGE_API_URL", "http://100.97.71.49:6380")
 TIMEOUT = 120.0
+VAULT_ROOT = Path(os.getenv("VAULT_ROOT", Path.home() / "second-brain"))
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 logger = logging.getLogger("knowledge-engine.mcp")
@@ -197,8 +200,32 @@ async def _ingest_one(client: httpx.AsyncClient, local_path: str, collection: st
         return {"file": local_path, "status": "error", "error": detail}
 
 
+def _sync_vault() -> str | None:
+    """Pull latest vault changes from remote (ficha generated on Mac Mini).
+
+    Returns a status message, or None if vault is not a git repo.
+    """
+    if not (VAULT_ROOT / ".git").is_dir():
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(VAULT_ROOT), "pull", "--rebase", "--autostash"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode == 0:
+            # Check if anything was pulled (vs "Already up to date.")
+            if "Already up to date" not in result.stdout:
+                logger.info("Vault synced: %s", result.stdout.strip())
+                return "vault synced"
+            return None
+        logger.warning("Vault pull failed: %s", result.stderr.strip())
+        return None
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+
+
 async def tool_ingest(client: httpx.AsyncClient, args: dict) -> str:
-    """Ingest files via rsync + Knowledge API."""
+    """Ingest files via Knowledge API and sync vault."""
     file_paths = args.get("file_paths", [])
     collection = args.get("collection") or "matheus"
 
@@ -240,6 +267,15 @@ async def tool_ingest(client: httpx.AsyncClient, args: dict) -> str:
             fname = os.path.basename(r["file"])
             doc_id = f" [ID: {r['document_id']}]" if r.get("document_id") else ""
             lines.append(f"  OK  {fname} ({r['chunks']} chunks){doc_id}")
+
+        # Post-ingest: sync vault to pull Layer 1 fichas generated on Mac Mini.
+        # The API writes fichas to the vault on the Mac Mini, commits via
+        # vault-commit.sh (launchd, every 10min), and pushes to GitHub.
+        # We trigger an immediate pull so the ficha is available locally.
+        sync_status = await asyncio.get_running_loop().run_in_executor(None, _sync_vault)
+        if sync_status:
+            lines.append(f"\n  Vault: {sync_status} (Layer 1 fichas pulled)")
+
     if errors:
         lines.append(f"\nFailed {len(errors)} file(s):")
         for r in errors:
