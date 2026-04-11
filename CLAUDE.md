@@ -72,7 +72,7 @@ All bundled scripts are at `${CLAUDE_PLUGIN_ROOT}/scripts/`:
 
 The `knowledge` MCP server provides 5 tools for the remote Knowledge API:
 - `knowledge_search` — semantic search across RAG collections
-- `knowledge_ingest` — ingest files (rsync to Mac Mini + API call)
+- `knowledge_ingest` — ingest files (multipart upload to Knowledge API over Tailscale)
 - `knowledge_documents` — list documents with filters
 - `knowledge_summary` — get AI summary for a document
 - `knowledge_health` — check API/Qdrant status

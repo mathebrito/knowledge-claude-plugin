@@ -19,8 +19,6 @@ import sys
 import httpx
 
 API_URL = os.getenv("KNOWLEDGE_API_URL", "http://100.97.71.49:6380")
-SSH_HOST = os.getenv("KNOWLEDGE_SSH_HOST", "tejo")
-SSH_STAGING_DIR = os.getenv("KNOWLEDGE_SSH_STAGING_DIR", "~/knowledge/inbox")
 TIMEOUT = 120.0
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
@@ -62,8 +60,8 @@ TOOLS = [
     {
         "name": "knowledge_ingest",
         "description": (
-            "Ingest one or more local files into the knowledge base. Files are transferred "
-            "to the Mac Mini via rsync over SSH, then ingested into Qdrant + MongoDB. "
+            "Ingest one or more local files into the knowledge base. Files are uploaded "
+            "directly to the Knowledge API via multipart HTTP, then ingested into Qdrant + MongoDB. "
             "Use this when the user uploads documents (PDF, markdown, text, etc.) and wants "
             "them added to their knowledge base."
         ),
@@ -162,48 +160,25 @@ async def tool_search(client: httpx.AsyncClient, args: dict) -> str:
     return "\n".join(lines)
 
 
-async def _rsync_file(local_path: str) -> tuple[bool, str, str]:
-    """Rsync a local file to the Mac Mini staging directory.
-
-    Returns (success, remote_absolute_path, error_message).
-    Uses asyncio.create_subprocess_exec which passes arguments directly
-    to the rsync binary without shell interpolation.
-    """
-    filename = os.path.basename(local_path)
-    remote_dest = f"{SSH_HOST}:{SSH_STAGING_DIR}/{filename}"
-    remote_abs = f"/Users/headless/knowledge/inbox/{filename}"
-
-    proc = await asyncio.create_subprocess_exec(
-        "rsync", "-az", "--timeout=30", local_path, remote_dest,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-
-    if proc.returncode != 0:
-        error = stderr.decode().strip() or f"rsync exit code {proc.returncode}"
-        return False, "", error
-
-    return True, remote_abs, ""
-
-
 async def _ingest_one(client: httpx.AsyncClient, local_path: str, collection: str) -> dict:
-    """Rsync a file to Mac Mini, then call the ingest API."""
+    """Upload a local file to the Knowledge API via multipart/form-data.
+
+    Uses the POST /api/v1/upload endpoint added in the rag_pipeline_gridfs_removal
+    release (2026-04-11). No rsync or SSH needed — direct HTTP upload over Tailscale.
+    """
     if not os.path.isfile(local_path):
         return {"file": local_path, "status": "error", "error": f"Local file not found: {local_path}"}
 
-    # Step 1: rsync to Mac Mini
-    success, remote_path, error = await _rsync_file(local_path)
-    if not success:
-        return {"file": local_path, "status": "error", "error": f"rsync failed: {error}"}
+    filename = os.path.basename(local_path)
 
-    # Step 2: Call ingest API with remote path
     try:
-        resp = await client.post(
-            f"{API_URL}/api/v1/ingest",
-            json={"file_path": remote_path, "collection": collection},
-            timeout=300,  # OCR + embedding can take minutes
-        )
+        with open(local_path, "rb") as f:
+            resp = await client.post(
+                f"{API_URL}/api/v1/upload",
+                files={"file": (filename, f)},
+                data={"collection": collection},
+                timeout=300,  # OCR + embedding can take minutes
+            )
         resp.raise_for_status()
         data = resp.json()
         return {
@@ -422,9 +397,7 @@ def respond_error(msg_id, code, message):
 
 
 async def main():
-    logger.info(
-        "Knowledge Engine MCP server starting (API: %s, SSH: %s)", API_URL, SSH_HOST
-    )
+    logger.info("Knowledge Engine MCP server starting (API: %s)", API_URL)
 
     async with httpx.AsyncClient() as client:
         while True:
