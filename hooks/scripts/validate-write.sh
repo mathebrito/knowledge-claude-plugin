@@ -27,7 +27,7 @@ except Exception:
 
 # Check if this is a .md file under ~/second-brain/
 case "$file_path" in
-  "${VAULT_DIR}"/*.md)
+  "${VAULT_DIR}"/*.md|"${VAULT_DIR}"/**/*.md)
     # Run the bundled validation script
     bundled_script="${PLUGIN_ROOT}/scripts/validate-write.sh"
     if [ ! -x "$bundled_script" ]; then

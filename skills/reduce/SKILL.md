@@ -39,15 +39,19 @@ in the second-brain vault.
 2. Pick the oldest unprocessed file.
 3. Show the user and ask for confirmation.
 
-### Phase 2: Ingest & Read
+### Phase 2: Read FIRST, Then Ingest
 
-1. **Ingest to RAG**: Call `mcp__knowledge__knowledge_ingest` for the file. This ensures:
-    - Original is stored in MongoDB (Binary).
-    - Layer 1 RAG Ficha is created in `B.TEJO/knowledge/`.
-    - Original is deleted from the vault/disk.
-    - Note: the MCP tool rsync's the file to Mac Mini before ingesting.
-2. **Read Content**: Read the source file with `read_file` BEFORE it is deleted, or use `mcp__knowledge__knowledge_search` if already processed.
-3. Chunk if > 2500 lines.
+**CRITICAL: Read the file BEFORE ingesting.** The ingestion pipeline may delete the
+original from disk. Always follow this order:
+
+1. **Read Content FIRST**: Read the source file with `Read` tool. Store the full text in memory.
+2. **Chunk if needed**: If > 2500 lines, split into chunks for processing.
+3. **Ingest to RAG**: Call `mcp__knowledge__knowledge_ingest` with the file path. This:
+    - Uploads the file to the Knowledge API via multipart HTTP
+    - Stores the original in MongoDB (Binary inline, up to 15MB)
+    - Creates embeddings in Qdrant
+    - Auto-generates a Layer 1 RAG Ficha in `B.TEJO/knowledge/`
+    - May delete the original from disk (files under `~/knowledge/` only; vault files are preserved)
 
 ### Phase 2.5: Create Wiki Ficha (Layer 2 Bridge)
 

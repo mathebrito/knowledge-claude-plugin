@@ -34,6 +34,34 @@ Wiki notes in `A.DIVA/wiki/` additionally need: `type`, `description`, `source` 
 
 `claim`, `concept`, `person`, `project`, `event`, `decision`, `document`, `synthesis`
 
+## Three-Layer Architecture (LLM Wiki)
+
+This plugin implements Andrej Karpathy's LLM Wiki pattern — a compounding
+knowledge base where the AI maintains a persistent, interconnected wiki
+rather than answering queries from raw sources each time.
+
+| Layer | What | Where | Who manages |
+|-------|------|-------|-------------|
+| **Layer 1: Sources** | Original documents — PDFs, articles, web clips | Qdrant + MongoDB on Mac Mini (via MCP tools) | Knowledge API (automatic) |
+| **Layer 2: Wiki** | Compiled knowledge — atomic claims, concepts, syntheses, linked together | `A.DIVA/wiki/` in the Obsidian vault | Claude (via /reduce, /reflect, /file-note) |
+| **Layer 3: Schema** | Conventions, types, taxonomy, thresholds | `A.DIVA/SCHEMA.md` + this CLAUDE.md | Manual + plugin reference docs |
+
+The wiki (Layer 2) is the primary knowledge surface. Layer 1 is the raw archive
+searched only when the wiki doesn't have the answer. Layer 3 defines how
+knowledge is structured.
+
+## Vault Resumption Protocol
+
+At the start of any knowledge-intensive session, orient yourself:
+
+1. Read `A.DIVA/SCHEMA.md` (if it exists) — domain conventions, tag taxonomy, thresholds
+2. Read `index.md` at vault root — auto-generated catalog of all wiki notes by type
+3. Read `A.DIVA/ops/log.md` (last 20 lines) — recent pipeline operations
+4. Read `A.DIVA/brain/North Star.md` (first 20 lines) — current goals and focus
+
+This ensures you understand the vault's current state before making changes.
+The session-start hook provides a summary, but for deep work, read these files directly.
+
 ## Vault-First Query Routing
 
 When answering knowledge questions, search the vault FIRST:

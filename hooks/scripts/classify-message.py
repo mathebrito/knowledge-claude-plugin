@@ -37,8 +37,7 @@ def main():
 
     try:
         result = subprocess.run(
-            [sys.executable, bundled_script],
-            input=message,
+            [sys.executable, bundled_script, message],
             capture_output=True,
             text=True,
             timeout=10,
@@ -50,15 +49,19 @@ def main():
     if not output:
         return
 
-    # Try to parse structured output from the bundled script
-    try:
-        classification = json.loads(output)
-        category = classification.get("category", "NOTE")
-        route = classification.get("route", "")
-    except (json.JSONDecodeError, ValueError):
-        # Plain-text output: treat the whole line as the category
-        category = output.split(None, 1)[0] if output else "NOTE"
-        route = output
+    # Bundled script outputs two lines:
+    #   CATEGORY
+    #   [vault-route: path/to/destination]
+    lines = output.splitlines()
+    category = lines[0].strip() if lines else "NOTE"
+    route = ""
+    if len(lines) > 1:
+        # Extract path from "[vault-route: X]"
+        route_line = lines[1].strip()
+        if route_line.startswith("[vault-route:"):
+            route = route_line.split(":", 1)[1].rstrip("]").strip()
+        else:
+            route = route_line
 
     if category == "NOTE":
         return

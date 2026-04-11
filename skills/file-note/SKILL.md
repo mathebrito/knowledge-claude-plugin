@@ -89,6 +89,7 @@ sources: ["[[<nota-1>]]", "[[<nota-2>]]"]
 query_origin: "<query original do usuario>"
 confidence: <high|medium|low>
 moc: "[[MOC-<dominio>]]"
+agent: DIVA (knowledge-engine plugin)
 model: <current model id>
 provider: <current provider>
 ---
@@ -173,6 +174,21 @@ Execute these steps in order:
 
 Match the language of the synthesis response. If the conversation was in
 Portuguese, write the note in Portuguese. Tags stay in English.
+
+## Auto-Filing Rules
+
+When a knowledge query produces a synthesis (combines >= 2 sources, produces new
+insight), assess confidence and act accordingly:
+
+| Confidence | Action |
+|-----------|--------|
+| **high** | File automatically via this workflow. Notify user: "Insight arquivado: [[slug]]" |
+| **medium** | Propose filing: "Gerei uma sintese. Arquivar? /file-note confirm \| /file-note skip" |
+| **low** | Do not auto-file. User can manually invoke `/file-note` |
+
+These rules apply during normal conversation, not just when `/file-note` is
+explicitly invoked. The filing loop is a core part of the LLM Wiki pattern —
+every synthesis is a candidate for permanent knowledge.
 
 ## Error Handling
 
