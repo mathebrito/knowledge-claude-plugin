@@ -34,6 +34,31 @@ test -d ~/second-brain/.git && echo "OK: vault is a git repo" || echo "FAIL: ~/s
 
 Report any missing prerequisites and stop if critical ones are absent.
 
+### Step 1.5: Verify Obsidian Configuration
+
+Check that Obsidian is properly configured for the vault.
+See `reference/obsidian-setup.md` for the full spec.
+
+Critical checks:
+```bash
+# Obsidian Git plugin installed?
+test -f ~/second-brain/.obsidian/plugins/obsidian-git/data.json && echo "OK" || echo "MISSING: obsidian-git"
+
+# Auto-push enabled? (must be > 0)
+grep '"autoPushInterval"' ~/second-brain/.obsidian/plugins/obsidian-git/data.json
+
+# Daily notes folder correct?
+grep '"folder"' ~/second-brain/.obsidian/daily-notes.json
+
+# Templates folder correct?
+grep '"folder"' ~/second-brain/.obsidian/templates.json
+```
+
+If `autoPushInterval` is `0`, warn the user:
+> ⚠ Obsidian Git auto-push is disabled. Commits will accumulate locally.
+> Fix: set `autoPushInterval` to `10` in `.obsidian/plugins/obsidian-git/data.json`
+> then reload the plugin in Obsidian.
+
 ### Step 2: Install qmd
 
 ```bash
@@ -109,6 +134,14 @@ Components:
   Collection: second-brain created  OK
   Embeddings: N files embedded  OK
   MCP venv:   created  OK
+
+Obsidian:
+  obsidian-git:    installed  OK
+  Auto-commit:     10 min  OK
+  Auto-push:       10 min  OK
+  Auto-pull:       10 min  OK
+  Daily notes:     D.DAILY/  OK
+  Templates:       A.DIVA/templates/  OK
 
 Connectivity:
   Tailscale:  100.97.71.49 reachable  OK
