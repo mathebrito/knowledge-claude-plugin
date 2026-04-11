@@ -2,7 +2,7 @@
 
 ## Vault
 
-Path: `~/second-brain/` (flat PARA+ABCD structure).
+Path: `~/second-brain/` (PARA+ABCD structure). Override with `VAULT_ROOT` env var if different (e.g., `~/second-brain/matheus/` on the Mac Mini).
 
 ### Zone Permissions
 
