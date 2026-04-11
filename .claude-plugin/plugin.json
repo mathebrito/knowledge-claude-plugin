@@ -1,0 +1,16 @@
+{
+  "name": "knowledge-engine",
+  "version": "1.0.0",
+  "description": "Knowledge pipeline for PARA+ABCD Obsidian vault — RAG search, document ingestion, vault curation (reduce, verify, reflect, file, lint, dump, standup, wrap-up). Uses local qmd for vault search, remote Knowledge API over Tailscale for RAG.",
+  "author": {
+    "name": "Matheus"
+  },
+  "keywords": [
+    "knowledge-management",
+    "obsidian",
+    "rag",
+    "qdrant",
+    "second-brain",
+    "zettelkasten"
+  ]
+}
