@@ -15,25 +15,29 @@ json_escape() {
   printf '%s' "$s"
 }
 
-# --- 1. Tailscale ---
-if ping -c1 -W2 100.97.71.49 >/dev/null 2>&1; then
+# --- 1+2. Knowledge host (tejo/mini2025) + Knowledge API ---
+# Probe the service itself first — that is what sessions actually need — then
+# diagnose transport only on failure. MagicDNS name survives IP churn; the raw
+# tailnet IP is the fallback when MagicDNS is unavailable.
+# (2026-08-02: replaced hardcoded 100.97.71.49 — a stale IP from tejo's old
+# duplicate device registration — which made every banner report UNREACHABLE.)
+KNOWLEDGE_HOST="mini2025.beago-quail.ts.net"
+KNOWLEDGE_IP="100.98.78.56"
+
+health_json=$(curl -sf "http://${KNOWLEDGE_HOST}:6380/health" --max-time 5 2>/dev/null \
+  || curl -sf "http://${KNOWLEDGE_IP}:6380/health" --max-time 5 2>/dev/null \
+  || true)
+
+if [ -n "$health_json" ]; then
   tailscale_status="CONNECTED"
+  qdrant=$(echo "$health_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('qdrant','unknown'))" 2>/dev/null || echo "unknown")
+  models=$(echo "$health_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('models_loaded','unknown'))" 2>/dev/null || echo "unknown")
+  api_status="UP (qdrant: ${qdrant}, models_loaded: ${models})"
+elif ping -c1 -W2 "$KNOWLEDGE_IP" >/dev/null 2>&1 || ping -c1 -W2 "$KNOWLEDGE_HOST" >/dev/null 2>&1; then
+  tailscale_status="CONNECTED"
+  api_status="DOWN (host reachable, service not answering on :6380)"
 else
   tailscale_status="UNREACHABLE — Remote RAG/ingest unavailable. Local vault search via qmd still works."
-fi
-
-# --- 2. Knowledge API ---
-api_status=""
-if [ "$tailscale_status" = "CONNECTED" ]; then
-  health_json=$(curl -sf http://100.97.71.49:6380/health --max-time 5 2>/dev/null || true)
-  if [ -z "$health_json" ]; then
-    api_status="DOWN"
-  else
-    qdrant=$(echo "$health_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('qdrant','unknown'))" 2>/dev/null || echo "unknown")
-    models=$(echo "$health_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('models_loaded','unknown'))" 2>/dev/null || echo "unknown")
-    api_status="UP (qdrant: ${qdrant}, models_loaded: ${models})"
-  fi
-else
   api_status="SKIPPED (Tailscale unreachable)"
 fi
 
@@ -48,8 +52,13 @@ fi
 if [ -z "$qmd_bin" ]; then
   qmd_status="NOT INSTALLED — Run /setup"
 else
-  sb_check=$($qmd_bin ls second-brain 2>/dev/null || true)
-  if [ -n "$sb_check" ]; then
+  # Capture stderr too: a crashing binary (e.g. better-sqlite3 built against an
+  # older Node ABI after a Homebrew Node upgrade) must report BROKEN, not be
+  # silently mistaken for a missing collection. (2026-08-02: was 2>/dev/null.)
+  sb_check=$($qmd_bin ls second-brain 2>&1) && sb_rc=0 || sb_rc=$?
+  if [ $sb_rc -ne 0 ] && printf '%s' "$sb_check" | grep -qiE 'Error|Cannot find|dlopen|NODE_MODULE_VERSION'; then
+    qmd_status="BROKEN — binary fails to run (likely Node ABI mismatch; try: npm -g rebuild better-sqlite3, or reinstall @tobilu/qmd)"
+  elif [ $sb_rc -eq 0 ] && [ -n "$sb_check" ]; then
     qmd_status="OK (second-brain collection found)"
   else
     qmd_status="INSTALLED (second-brain collection not found)"
