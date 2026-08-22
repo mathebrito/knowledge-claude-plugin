@@ -22,7 +22,7 @@ json_escape() {
 # (2026-08-02: replaced hardcoded 100.97.71.49 — a stale IP from tejo's old
 # duplicate device registration — which made every banner report UNREACHABLE.)
 KNOWLEDGE_HOST="matbookpro16.beago-quail.ts.net"
-KNOWLEDGE_IP="100.69.171.35"
+KNOWLEDGE_IP="100.124.122.92"
 
 health_json=$(curl -sf "http://${KNOWLEDGE_HOST}:6380/health" --max-time 5 2>/dev/null \
   || curl -sf "http://${KNOWLEDGE_IP}:6380/health" --max-time 5 2>/dev/null \
