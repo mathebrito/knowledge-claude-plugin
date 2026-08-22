@@ -21,8 +21,8 @@ json_escape() {
 # tailnet IP is the fallback when MagicDNS is unavailable.
 # (2026-08-02: replaced hardcoded 100.97.71.49 — a stale IP from tejo's old
 # duplicate device registration — which made every banner report UNREACHABLE.)
-KNOWLEDGE_HOST="mini2025.beago-quail.ts.net"
-KNOWLEDGE_IP="100.98.78.56"
+KNOWLEDGE_HOST="matbookpro16.beago-quail.ts.net"
+KNOWLEDGE_IP="100.69.171.35"
 
 health_json=$(curl -sf "http://${KNOWLEDGE_HOST}:6380/health" --max-time 5 2>/dev/null \
   || curl -sf "http://${KNOWLEDGE_IP}:6380/health" --max-time 5 2>/dev/null \
