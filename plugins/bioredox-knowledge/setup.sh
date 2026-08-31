@@ -224,21 +224,30 @@ unset BUZZ_NSEC DERIVED_NPUB
 say "The key pair matches."
 
 stage "Store the key in the local macOS Keychain"
-say "The Keychain will ask for the same nsec again with hidden input."
-if ! confirm "Store the key only in this Mac's login Keychain?"; then
-  warn "No key was stored."
-  exit 1
-fi
-/usr/bin/security add-generic-password \
-  -U \
-  -a "${KEYCHAIN_ACCOUNT}" \
-  -s "${KEYCHAIN_SERVICE}" \
-  -l "BioRedox Buzz signing key" \
-  -w
-STORED_NPUB=$(/usr/bin/security find-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w | uv run --quiet --with 'nostr-sdk==0.44.2' python -c 'import sys; from nostr_sdk import Keys; print(Keys.parse(sys.stdin.read().strip()).public_key().to_bech32())')
-if [[ "${STORED_NPUB}" != "${EXPECTED_NPUB}" ]]; then
-  warn "The stored key does not match the Buzz npub."
-  exit 1
+if /usr/bin/security find-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" >/dev/null 2>&1; then
+  STORED_NPUB=$(/usr/bin/security find-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w | uv run --quiet --with 'nostr-sdk==0.44.2' python -c 'import sys; from nostr_sdk import Keys; print(Keys.parse(sys.stdin.read().strip()).public_key().to_bech32())')
+  if [[ "${STORED_NPUB}" != "${EXPECTED_NPUB}" ]]; then
+    warn "A different key already uses this Keychain service. Nothing was changed."
+    exit 1
+  fi
+  say "The matching key is already in this Mac's login Keychain."
+else
+  say "The Keychain will ask for the same nsec again with hidden input."
+  if ! confirm "Store the key only in this Mac's login Keychain?"; then
+    warn "No key was stored."
+    exit 1
+  fi
+  /usr/bin/security add-generic-password \
+    -a "${KEYCHAIN_ACCOUNT}" \
+    -s "${KEYCHAIN_SERVICE}" \
+    -l "BioRedox Buzz signing key" \
+    -w
+  STORED_NPUB=$(/usr/bin/security find-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w | uv run --quiet --with 'nostr-sdk==0.44.2' python -c 'import sys; from nostr_sdk import Keys; print(Keys.parse(sys.stdin.read().strip()).public_key().to_bech32())')
+  if [[ "${STORED_NPUB}" != "${EXPECTED_NPUB}" ]]; then
+    /usr/bin/security delete-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" >/dev/null
+    warn "The stored key did not match. The new Keychain item was removed."
+    exit 1
+  fi
 fi
 unset STORED_NPUB EXPECTED_NPUB
 
