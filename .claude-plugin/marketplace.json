@@ -1,0 +1,16 @@
+{
+  "name": "mathebrito-knowledge",
+  "description": "Knowledge MCP plugins maintained by Matheus Brito.",
+  "owner": {
+    "name": "Matheus Brito"
+  },
+  "plugins": [
+    {
+      "name": "bioredox-knowledge",
+      "source": "./plugins/bioredox-knowledge",
+      "description": "Private signed access to the isolated BioRedox knowledge collection.",
+      "category": "productivity",
+      "tags": ["bioredox", "knowledge", "mcp", "rag"]
+    }
+  ]
+}

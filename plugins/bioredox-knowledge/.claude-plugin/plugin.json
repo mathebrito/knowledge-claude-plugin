@@ -1,0 +1,9 @@
+{
+  "name": "bioredox-knowledge",
+  "version": "0.1.0",
+  "description": "Private NIP-98 Knowledge MCP for BioRedox cofounders.",
+  "author": {
+    "name": "Matheus Brito"
+  },
+  "keywords": ["bioredox", "knowledge", "mcp", "rag", "nip98"]
+}
