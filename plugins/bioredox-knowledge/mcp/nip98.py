@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shlex
 import subprocess
 import time
 
@@ -39,28 +38,24 @@ class LocalIdentityError(RuntimeError):
 
 
 def _load_local_keys() -> Keys:
-    """Read the nsec from a local command or the macOS Keychain."""
-    command = os.getenv("KNOWLEDGE_NSEC_COMMAND", "").strip()
-    if command:
-        argv = shlex.split(command)
-    else:
-        account = (
-            os.getenv("KNOWLEDGE_NSEC_KEYCHAIN_ACCOUNT", "").strip()
-            or LOCAL_CONFIG.get("keychain_account", "").strip()
-            or getpass.getuser()
-        )
-        service = os.getenv(
-            "KNOWLEDGE_NSEC_KEYCHAIN_SERVICE", "bio.bioredox.buzz.nsec"
-        )
-        argv = [
-            "/usr/bin/security",
-            "find-generic-password",
-            "-s",
-            service,
-            "-a",
-            account,
-            "-w",
-        ]
+    """Read the nsec only from the local macOS Keychain."""
+    account = (
+        os.getenv("KNOWLEDGE_NSEC_KEYCHAIN_ACCOUNT", "").strip()
+        or LOCAL_CONFIG.get("keychain_account", "").strip()
+        or getpass.getuser()
+    )
+    service = os.getenv(
+        "KNOWLEDGE_NSEC_KEYCHAIN_SERVICE", "bio.bioredox.buzz.nsec"
+    )
+    argv = [
+        "/usr/bin/security",
+        "find-generic-password",
+        "-s",
+        service,
+        "-a",
+        account,
+        "-w",
+    ]
 
     try:
         result = subprocess.run(

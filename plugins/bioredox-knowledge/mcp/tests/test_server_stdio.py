@@ -166,27 +166,31 @@ def test_stdio_process_lists_and_executes_five_signed_tools(
 
     keys = Keys.generate()
     SignedApiHandler.expected_pubkey = keys.public_key().to_hex()
-    key_script = tmp_path / "test_key_provider.py"
-    key_script.write_text(f"print({keys.secret_key().to_bech32()!r})\n")
     source = tmp_path / "source.txt"
     source.write_bytes(b"venture source")
+
+    key_read_fd, key_write_fd = os.pipe()
+    os.write(key_write_fd, keys.secret_key().to_bech32().encode())
+    os.close(key_write_fd)
 
     environment = os.environ.copy()
     environment.update(
         {
             "KNOWLEDGE_API_URL": SignedApiHandler.base_url,
-            "KNOWLEDGE_NSEC_COMMAND": f"{sys.executable} {key_script}",
+            "BIOREDOX_TEST_NSEC_FD": str(key_read_fd),
         }
     )
     process = subprocess.Popen(
-        [sys.executable, "mcp/server.py"],
+        [sys.executable, "mcp/tests/stdio_test_runner.py"],
         cwd=PLUGIN_ROOT,
         env=environment,
+        pass_fds=(key_read_fd,),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
+    os.close(key_read_fd)
     try:
         initialized = _rpc(
             process,
