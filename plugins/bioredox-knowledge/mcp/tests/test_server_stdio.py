@@ -177,6 +177,7 @@ def test_stdio_process_lists_and_executes_five_signed_tools(
     environment.update(
         {
             "KNOWLEDGE_API_URL": SignedApiHandler.base_url,
+            "KNOWLEDGE_UPLOAD_ROOT": str(tmp_path),
             "BIOREDOX_TEST_NSEC_FD": str(key_read_fd),
         }
     )
@@ -275,5 +276,35 @@ def test_incomplete_ingestion_becomes_an_mcp_error(tmp_path: Path, monkeypatch):
     import httpx
 
     monkeypatch.setattr(server, "_signed_request", incomplete_request)
+    monkeypatch.setattr(server, "UPLOAD_ROOT", tmp_path)
     with pytest.raises(server.ToolExecutionError, match="did not complete"):
         asyncio.run(server.tool_ingest(object(), {"file_paths": [str(source)]}))
+
+
+def test_ingestion_rejects_a_path_outside_the_upload_root(tmp_path: Path, monkeypatch):
+    from mcp import server
+
+    upload_root = tmp_path / "allowed"
+    upload_root.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"private material")
+    monkeypatch.setattr(server, "UPLOAD_ROOT", upload_root)
+
+    result = asyncio.run(server._ingest_one(object(), str(outside)))
+
+    assert result["status"] == "error"
+    assert "inside" in result["error"]
+
+
+def test_ingestion_rejects_an_oversize_file_before_reading(tmp_path: Path, monkeypatch):
+    from mcp import server
+
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"too large")
+    monkeypatch.setattr(server, "UPLOAD_ROOT", tmp_path)
+    monkeypatch.setattr(server, "MAX_UPLOAD_BYTES", 1)
+
+    result = asyncio.run(server._ingest_one(object(), str(source)))
+
+    assert result["status"] == "error"
+    assert "50 MiB" in result["error"]

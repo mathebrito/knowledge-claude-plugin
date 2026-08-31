@@ -191,6 +191,7 @@ KEYCHAIN_SERVICE=bio.bioredox.buzz.nsec
 KEYCHAIN_ACCOUNT=$(id -un)
 API_ENDPOINT=https://knowledge.bioredox.bio:8444
 CONFIG_FILE="${SCRIPT_DIR}/mcp/local-config.json"
+UPLOAD_ROOT="${HOME}/BioRedox Knowledge Uploads"
 
 command -v uv >/dev/null 2>&1 || {
   warn "uv is required before this setup can continue."
@@ -252,8 +253,10 @@ fi
 unset STORED_NPUB EXPECTED_NPUB
 
 stage "Install and configure the local MCP"
-printf '{\n  "api_url": "%s",\n  "keychain_account": "%s"\n}\n' \
-  "${API_ENDPOINT}" "${KEYCHAIN_ACCOUNT}" > "${CONFIG_FILE}"
+mkdir -p "${UPLOAD_ROOT}"
+chmod 700 "${UPLOAD_ROOT}"
+printf '{\n  "api_url": "%s",\n  "keychain_account": "%s",\n  "upload_root": "%s"\n}\n' \
+  "${API_ENDPOINT}" "${KEYCHAIN_ACCOUNT}" "${UPLOAD_ROOT}" > "${CONFIG_FILE}"
 chmod 600 "${CONFIG_FILE}"
 UV_BIN=$(command -v uv)
 if command -v codex >/dev/null 2>&1; then
@@ -268,6 +271,7 @@ else
   warn "Codex is not installed, so its MCP registration was skipped."
 fi
 say "The public local configuration is ready."
+say "Place approved source files in ${UPLOAD_ROOT} before ingestion."
 
 stage "Run a signed health check"
 say "This request proves the network route, signature, allowlist, API, and Qdrant."

@@ -11,18 +11,25 @@ import asyncio
 import json
 import logging
 import mimetypes
+import os
 from pathlib import Path
 import sys
 
 import httpx
 
 try:
-    from .nip98 import API_URL, LocalIdentityError, signed_request as _signed_request
+    from .nip98 import API_URL, LOCAL_CONFIG, LocalIdentityError, signed_request as _signed_request
 except ImportError:
-    from nip98 import API_URL, LocalIdentityError, signed_request as _signed_request
+    from nip98 import API_URL, LOCAL_CONFIG, LocalIdentityError, signed_request as _signed_request
 
 
 TIMEOUT = 120.0
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+UPLOAD_ROOT = Path(
+    os.getenv("KNOWLEDGE_UPLOAD_ROOT")
+    or LOCAL_CONFIG.get("upload_root", "")
+    or Path.home() / "BioRedox Knowledge Uploads"
+).expanduser().resolve()
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 logger = logging.getLogger("bioredox-knowledge.mcp")
@@ -53,7 +60,7 @@ TOOLS = [
                 "file_paths": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Absolute local file paths selected by the user",
+                    "description": f"User-selected files under {UPLOAD_ROOT}",
                 }
             },
             "required": ["file_paths"],
@@ -114,10 +121,28 @@ async def tool_search(client: httpx.AsyncClient, args: dict) -> str:
 
 
 async def _ingest_one(client: httpx.AsyncClient, local_path: str) -> dict:
-    path = Path(local_path).expanduser()
-    if not path.is_file():
-        return {"file": local_path, "status": "error", "error": "Local file not found"}
-    file_bytes = path.read_bytes()
+    try:
+        path = Path(local_path).expanduser().resolve(strict=True)
+        path.relative_to(UPLOAD_ROOT)
+        if not path.is_file():
+            raise OSError("Path is not a regular file")
+        file_size = path.stat().st_size
+        if file_size > MAX_UPLOAD_BYTES:
+            return {
+                "file": local_path,
+                "status": "error",
+                "error": "File exceeds the 50 MiB upload limit",
+            }
+        file_bytes = path.read_bytes()
+    except ValueError:
+        return {
+            "file": local_path,
+            "status": "error",
+            "error": f"File must be inside {UPLOAD_ROOT}",
+        }
+    except OSError:
+        return {"file": local_path, "status": "error", "error": "Local file is not readable"}
+
     content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     try:
         response = await _signed_request(
@@ -157,7 +182,7 @@ async def tool_ingest(client: httpx.AsyncClient, args: dict) -> str:
     if not file_paths:
         raise ToolExecutionError("No file paths provided")
 
-    semaphore = asyncio.Semaphore(4)
+    semaphore = asyncio.Semaphore(1)
 
     async def bounded(path: str) -> dict:
         async with semaphore:
@@ -265,7 +290,7 @@ async def main() -> None:
                     {
                         "protocolVersion": "2024-11-05",
                         "capabilities": {"tools": {}},
-                        "serverInfo": {"name": "bioredox-knowledge", "version": "1.0.0"},
+                        "serverInfo": {"name": "bioredox-knowledge", "version": "0.1.0"},
                     },
                 )
             elif method == "notifications/initialized":

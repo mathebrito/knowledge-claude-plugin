@@ -24,6 +24,9 @@ claude plugin install bioredox-knowledge@mathebrito-knowledge
 
 Then run `./plugins/bioredox-knowledge/setup.sh` from the repository root.
 The local setup wizard verifies the existing Buzz identity and stores its key under the `bio.bioredox.buzz.nsec` Keychain service.
-It writes only the public endpoint and the local Keychain account to `mcp/local-config.json`.
+It writes only the public endpoint, the local Keychain account, and the upload folder to `mcp/local-config.json`.
 The configuration file stays untracked.
 The wizard also registers the same local MCP with Codex when the `codex` command is available.
+
+Copy each approved source into `~/BioRedox Knowledge Uploads` before ingestion.
+The MCP rejects paths outside that folder, symlink escapes, and files larger than 50 MiB.
