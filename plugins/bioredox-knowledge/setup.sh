@@ -243,14 +243,25 @@ fi
 unset STORED_NPUB EXPECTED_NPUB
 
 stage "Install and configure the local MCP"
-"${SCRIPT_DIR}/mcp/setup.sh"
 printf '{\n  "api_url": "%s",\n  "keychain_account": "%s"\n}\n' \
   "${API_ENDPOINT}" "${KEYCHAIN_ACCOUNT}" > "${CONFIG_FILE}"
 chmod 600 "${CONFIG_FILE}"
-say "The MCP dependencies and public local configuration are ready."
+UV_BIN=$(command -v uv)
+if command -v codex >/dev/null 2>&1; then
+  if codex mcp get bioredox-knowledge >/dev/null 2>&1; then
+    codex mcp remove bioredox-knowledge >/dev/null
+  fi
+  codex mcp add bioredox-knowledge -- \
+    "${UV_BIN}" run "${SCRIPT_DIR}/mcp/server.py" >/dev/null
+  say "The MCP is registered for the local Codex host."
+else
+  SKIPPED+=("Codex MCP registration (install Codex, then run this setup again)")
+  warn "Codex is not installed, so its MCP registration was skipped."
+fi
+say "The public local configuration is ready."
 
 stage "Run a signed health check"
 say "This request proves the network route, signature, allowlist, API, and Qdrant."
-"${SCRIPT_DIR}/mcp/.venv/bin/python" "${SCRIPT_DIR}/mcp/health_check.py"
+uv run "${SCRIPT_DIR}/mcp/health_check.py"
 
 finish

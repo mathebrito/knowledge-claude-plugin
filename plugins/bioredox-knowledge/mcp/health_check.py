@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["httpx>=0.27", "nostr-sdk==0.44.2"]
+# ///
 """Run one signed BioRedox Knowledge health check."""
 
 from __future__ import annotations
