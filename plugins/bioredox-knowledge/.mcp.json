@@ -1,0 +1,6 @@
+{
+  "bioredox-knowledge": {
+    "command": "${CLAUDE_PLUGIN_ROOT}/mcp/.venv/bin/python3",
+    "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/server.py"]
+  }
+}

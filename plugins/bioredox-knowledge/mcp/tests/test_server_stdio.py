@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import hashlib
 import json
 import os
@@ -14,6 +15,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 from nostr_sdk import Event
+
+
+PLUGIN_ROOT = Path(__file__).parents[2]
+sys.path.insert(0, str(PLUGIN_ROOT))
 
 
 class SignedApiHandler(BaseHTTPRequestHandler):
@@ -66,6 +71,7 @@ class SignedApiHandler(BaseHTTPRequestHandler):
                 }
             )
         elif self.path.startswith("/v1/documents"):
+            assert "collection=" not in self.path
             self._respond(
                 {
                     "documents": [
@@ -174,7 +180,7 @@ def test_stdio_process_lists_and_executes_five_signed_tools(
     )
     process = subprocess.Popen(
         [sys.executable, "mcp/server.py"],
-        cwd=Path(__file__).parents[2],
+        cwd=PLUGIN_ROOT,
         env=environment,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -205,7 +211,7 @@ def test_stdio_process_lists_and_executes_five_signed_tools(
 
         calls = [
             ("knowledge_search", {"query": "jarosite"}),
-            ("knowledge_documents", {}),
+            ("knowledge_documents", {"collection": "matheus"}),
             ("knowledge_summary", {"document_id": "doc-1"}),
             ("knowledge_health", {}),
             ("knowledge_ingest", {"file_paths": [str(source)]}),
@@ -242,3 +248,28 @@ def test_stdio_process_lists_and_executes_five_signed_tools(
     assert process.stderr is not None
     stderr = process.stderr.read()
     assert keys.secret_key().to_bech32() not in stderr
+
+
+def test_incomplete_ingestion_becomes_an_mcp_error(tmp_path: Path, monkeypatch):
+    from mcp import server
+
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"venture source")
+
+    async def incomplete_request(*args, **kwargs):
+        return httpx.Response(
+            200,
+            json={
+                "document_id": "doc-1",
+                "status": "processing",
+                "collection": "nanolime",
+                "chunks_stored": 0,
+            },
+            request=httpx.Request("POST", "http://knowledge.test/v1/upload"),
+        )
+
+    import httpx
+
+    monkeypatch.setattr(server, "_signed_request", incomplete_request)
+    with pytest.raises(server.ToolExecutionError, match="did not complete"):
+        asyncio.run(server.tool_ingest(object(), {"file_paths": [str(source)]}))
