@@ -343,7 +343,7 @@ async def main() -> None:
                             "isError": True,
                         },
                     )
-                except (httpx.ConnectError, httpx.TimeoutException):
+                except httpx.RequestError:
                     respond(
                         message_id,
                         {

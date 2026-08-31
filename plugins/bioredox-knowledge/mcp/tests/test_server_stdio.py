@@ -296,6 +296,23 @@ def test_ingestion_rejects_a_path_outside_the_upload_root(tmp_path: Path, monkey
     assert "inside" in result["error"]
 
 
+def test_ingestion_rejects_a_symlink_escape(tmp_path: Path, monkeypatch):
+    from mcp import server
+
+    upload_root = tmp_path / "allowed"
+    upload_root.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"private material")
+    link = upload_root / "source.txt"
+    link.symlink_to(outside)
+    monkeypatch.setattr(server, "UPLOAD_ROOT", upload_root)
+
+    result = asyncio.run(server._ingest_one(object(), str(link)))
+
+    assert result["status"] == "error"
+    assert "inside" in result["error"]
+
+
 def test_ingestion_rejects_an_oversize_file_before_reading(tmp_path: Path, monkeypatch):
     from mcp import server
 

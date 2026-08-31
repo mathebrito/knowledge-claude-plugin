@@ -193,6 +193,16 @@ API_ENDPOINT=https://knowledge.bioredox.bio:8444
 CONFIG_FILE="${SCRIPT_DIR}/mcp/local-config.json"
 UPLOAD_ROOT="${HOME}/BioRedox Knowledge Uploads"
 
+keychain_npub() {
+  /usr/bin/security find-generic-password \
+    -s "${KEYCHAIN_SERVICE}" \
+    -a "${KEYCHAIN_ACCOUNT}" \
+    -w 2>/dev/null \
+    | uv run --quiet --with 'nostr-sdk==0.44.2' python -c \
+      'import sys; from nostr_sdk import Keys; print(Keys.parse(sys.stdin.read().strip()).public_key().to_bech32())' \
+      2>/dev/null
+}
+
 command -v uv >/dev/null 2>&1 || {
   warn "uv is required before this setup can continue."
   exit 1
@@ -226,7 +236,10 @@ say "The key pair matches."
 
 stage "Store the key in the local macOS Keychain"
 if /usr/bin/security find-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" >/dev/null 2>&1; then
-  STORED_NPUB=$(/usr/bin/security find-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w | uv run --quiet --with 'nostr-sdk==0.44.2' python -c 'import sys; from nostr_sdk import Keys; print(Keys.parse(sys.stdin.read().strip()).public_key().to_bech32())')
+  if ! STORED_NPUB=$(keychain_npub); then
+    warn "The existing Keychain item is not a valid Nostr key. Nothing was changed."
+    exit 1
+  fi
   if [[ "${STORED_NPUB}" != "${EXPECTED_NPUB}" ]]; then
     warn "A different key already uses this Keychain service. Nothing was changed."
     exit 1
@@ -243,7 +256,11 @@ else
     -s "${KEYCHAIN_SERVICE}" \
     -l "BioRedox Buzz signing key" \
     -w
-  STORED_NPUB=$(/usr/bin/security find-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w | uv run --quiet --with 'nostr-sdk==0.44.2' python -c 'import sys; from nostr_sdk import Keys; print(Keys.parse(sys.stdin.read().strip()).public_key().to_bech32())')
+  if ! STORED_NPUB=$(keychain_npub); then
+    /usr/bin/security delete-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" >/dev/null
+    warn "The new Keychain item was invalid, so the setup removed it."
+    exit 1
+  fi
   if [[ "${STORED_NPUB}" != "${EXPECTED_NPUB}" ]]; then
     /usr/bin/security delete-generic-password -s "${KEYCHAIN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" >/dev/null
     warn "The stored key did not match. The new Keychain item was removed."
