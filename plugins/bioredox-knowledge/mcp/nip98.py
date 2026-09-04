@@ -102,9 +102,10 @@ def _authorization(method: str, url: str, body: bytes) -> str:
 
 def canonical_payload(payload: dict) -> bytes:
     """Canonical JSON for one v2 request body with its `auth` block excluded."""
-    # ponytail: every field the sealed v2 request schemas allow is a string, which makes
-    # sorted compact JSON byte-identical to RFC 8785. Bring in a JCS library if a number,
-    # a float, or a non-BMP escape ever enters a v2 request body.
+    # ponytail: the sealed v2 request schemas allow only strings and small bounded
+    # integers, whose shortest form is the same in json.dumps and RFC 8785, so sorted
+    # compact JSON is byte-identical. Bring in a JCS library if a float, a large integer,
+    # or a non-BMP escape ever enters a v2 request body.
     return json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode()

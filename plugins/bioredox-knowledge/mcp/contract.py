@@ -31,6 +31,8 @@ INGEST_ASYNC_REQUEST = "knowledge-ingest-async-request.schema.json"
 INGEST_ASYNC_RESPONSE = "knowledge-ingest-async-response.schema.json"
 INGEST_STATUS_REQUEST = "knowledge-ingest-status-request.schema.json"
 INGEST_STATUS_RESPONSE = "knowledge-ingest-status-response.schema.json"
+SEARCH_V2_REQUEST = "knowledge-search-v2-request.schema.json"
+SEARCH_V2_RESPONSE = "knowledge-search-v2-response.schema.json"
 
 
 class ContractViolation(RuntimeError):

@@ -1,4 +1,4 @@
-"""Fixture-driven tests for the asynchronous Knowledge v2 tools. No live calls."""
+"""Fixture-driven tests for the Knowledge v2 tools. No live calls."""
 
 from __future__ import annotations
 
@@ -214,6 +214,8 @@ def test_a_repeated_receipt_is_an_in_process_no_op():
         ("replayed event", "async", "replayed-event.json", 409),
         ("disallowed principal", "async", "disallowed-principal.json", 403),
         ("quota refused before action", "async", "quota-refused-before-action.json", 429),
+        ("unknown document", "search", "not-found-unknown-document.json", 404),
+        ("foreign document", "search", "not-found-foreign-document.json", 404),
     ],
 )
 def test_a_sanitized_refusal_reaches_the_caller_unchanged(
@@ -227,6 +229,16 @@ def test_a_sanitized_refusal_reaches_the_caller_unchanged(
     if tool == "status":
         job_id = load(V2_FIXTURES / "ingest-status-request.json")["job_id"]
         coroutine = call(server.tool_ingest_status, handler, {"job_id": job_id})
+    elif tool == "search":
+        search_request = load(V2_FIXTURES / "search-v2-request.json")
+        coroutine = call(
+            server.tool_search_v2,
+            handler,
+            {
+                "document_id": search_request["document_id"],
+                "query": search_request["query"],
+            },
+        )
     else:
         coroutine = call(
             server.tool_ingest_async,
@@ -337,12 +349,130 @@ def test_a_caller_supplied_principal_or_collection_is_refused_before_any_request
         run(call(server.tool_ingest_async, handler, args))
     with pytest.raises(server.ToolExecutionError, match="only identity"):
         run(call(server.tool_ingest_status, handler, {"job_id": "job_x", identity: "x"}))
+    with pytest.raises(server.ToolExecutionError, match="only identity"):
+        run(
+            call(
+                server.tool_search_v2,
+                handler,
+                {"document_id": "doc_x", "query": "x", identity: "x"},
+            )
+        )
 
     assert calls == []
 
 
-def test_neither_v2_tool_declares_a_principal_or_collection_input():
-    for name in ("knowledge_ingest_async", "knowledge_ingest_status"):
+def test_no_v2_tool_declares_a_principal_or_collection_input():
+    for name in ("knowledge_ingest_async", "knowledge_ingest_status", "knowledge_search_v2"):
         schema = next(tool for tool in server.TOOLS if tool["name"] == name)["inputSchema"]
         assert schema["additionalProperties"] is False
         assert server.CALLER_FORBIDDEN_KEYS.isdisjoint(schema["properties"])
+
+
+# --- document-scoped search --------------------------------------------------------------
+
+
+def test_search_v2_sends_the_sealed_request_shape_and_lists_the_sealed_evidence(
+    local_signing_key,
+):
+    sealed_request = load(V2_FIXTURES / "search-v2-request.json")
+    sealed_response = load(V2_FIXTURES / "search-v2-response.json")
+    handler, calls = responder(sealed_response)
+
+    text = run(
+        call(
+            server.tool_search_v2,
+            handler,
+            {
+                "document_id": sealed_request["document_id"],
+                "query": sealed_request["query"],
+                "top_k": sealed_request["top_k"],
+            },
+        )
+    )
+
+    (unit,) = sealed_response["evidence_units"]
+    assert sealed_response["document_version"] in text
+    assert unit["content"] in text
+    assert unit["source_caption"] in text
+    assert " > ".join(unit["section_path"]) in text
+    # The reader gets a 1-based page and the 0-based index it came from.
+    assert f'{unit["item_type"]} -- page 1 (page_index 0)' in text
+    assert "Box (points, top-left): 0,0 to 10,10 on 595x842" in text
+
+    (request,) = calls
+    assert request.url.path == "/v2/knowledge_search_v2"
+    assert request.headers["Authorization"].startswith("Nostr ")
+    sent = json.loads(request.content)
+
+    payload = {key: value for key, value in sent.items() if key != "auth"}
+    assert payload == {
+        key: value for key, value in sealed_request.items() if key != "auth"
+    }
+
+    auth = sent["auth"]
+    assert auth["principal_id"] == local_signing_key.public_key().to_hex()
+    assert auth["url"] == sealed_request["auth"]["url"]
+    # top_k is the first integer in a signed v2 payload; canonicalization must still bind.
+    assert auth["payload_sha256"] == hashlib.sha256(
+        nip98.canonical_payload(payload)
+    ).hexdigest()
+
+
+def test_search_v2_defaults_top_k_to_the_sealed_default():
+    sealed_request = load(V2_FIXTURES / "search-v2-request.json")
+    handler, calls = responder(load(V2_FIXTURES / "search-v2-response.json"))
+
+    run(
+        call(
+            server.tool_search_v2,
+            handler,
+            {
+                "document_id": sealed_request["document_id"],
+                "query": sealed_request["query"],
+            },
+        )
+    )
+
+    assert json.loads(calls[0].content)["top_k"] == sealed_request["top_k"] == 5
+
+
+def test_a_search_response_missing_a_required_field_is_a_client_side_contract_violation():
+    sealed_request = load(V2_FIXTURES / "search-v2-request.json")
+    truncated = load(V2_FIXTURES / "search-v2-response.json")
+    del truncated["document_version"]
+    handler, _ = responder(truncated)
+
+    with pytest.raises(contract.ContractViolation) as failure:
+        run(
+            call(
+                server.tool_search_v2,
+                handler,
+                {
+                    "document_id": sealed_request["document_id"],
+                    "query": sealed_request["query"],
+                },
+            )
+        )
+
+    assert "The Knowledge API response violates" in str(failure.value)
+    assert "document_version" in str(failure.value)
+
+
+def test_a_top_k_outside_the_sealed_bounds_never_reaches_the_gateway():
+    sealed_request = load(V2_FIXTURES / "search-v2-request.json")
+    handler, calls = responder(load(V2_FIXTURES / "search-v2-response.json"))
+
+    with pytest.raises(contract.ContractViolation, match="The request violates"):
+        run(
+            call(
+                server.tool_search_v2,
+                handler,
+                {
+                    "document_id": sealed_request["document_id"],
+                    "query": sealed_request["query"],
+                    "top_k": 21,
+                },
+            )
+        )
+
+    assert calls == []
