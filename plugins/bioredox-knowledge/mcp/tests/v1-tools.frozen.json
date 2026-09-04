@@ -1,0 +1,102 @@
+[
+  {
+    "description": "Search BioRedox source material in the isolated nanolime knowledge collection.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Scope to one document",
+          "type": "string"
+        },
+        "language": {
+          "description": "Language code such as pt or en",
+          "type": "string"
+        },
+        "query": {
+          "description": "Search query",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "top_k": {
+          "default": 5,
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "knowledge_search"
+  },
+  {
+    "description": "Upload lawful, venture-relevant, sanitized local source files to BioRedox knowledge.",
+    "inputSchema": {
+      "properties": {
+        "file_paths": {
+          "description": "User-selected files under {UPLOAD_ROOT}",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "file_paths"
+      ],
+      "type": "object"
+    },
+    "name": "knowledge_ingest"
+  },
+  {
+    "description": "List documents in the isolated BioRedox knowledge collection.",
+    "inputSchema": {
+      "properties": {
+        "language": {
+          "description": "Language code such as pt or en",
+          "type": "string"
+        },
+        "status": {
+          "description": "processing, completed, or failed",
+          "type": "string"
+        },
+        "tags": {
+          "description": "Comma-separated tags",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "knowledge_documents"
+  },
+  {
+    "description": "Read the summary and findings for one BioRedox knowledge document.",
+    "inputSchema": {
+      "properties": {
+        "document_id": {
+          "description": "Document ID",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "type": "object"
+    },
+    "name": "knowledge_summary"
+  },
+  {
+    "description": "Check the private BioRedox Knowledge API and Qdrant state.",
+    "inputSchema": {
+      "properties": {},
+      "type": "object"
+    },
+    "name": "knowledge_health"
+  }
+]

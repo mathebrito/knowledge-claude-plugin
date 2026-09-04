@@ -1,0 +1,37 @@
+{
+  "contract_version": "2.0.0",
+  "job": {
+    "initial": "RECEIVED",
+    "success_terminal": "SUCCEEDED",
+    "terminal": ["SUCCEEDED", "FAILED", "CANCELLED", "QUARANTINED", "ROLLED_BACK"],
+    "ordered_stages": ["RECEIVED", "VALIDATING", "PARSING", "DERIVING", "EMBEDDING", "INDEXING", "VALIDATING_VERSION", "ACTIVATING", "RECONCILING", "SUCCEEDED"],
+    "transitions": {
+      "RECEIVED": ["VALIDATING", "FAILED", "CANCELLED"],
+      "VALIDATING": ["PARSING", "FAILED", "CANCELLED"],
+      "PARSING": ["DERIVING", "FAILED", "CANCELLED"],
+      "DERIVING": ["EMBEDDING", "FAILED", "CANCELLED"],
+      "EMBEDDING": ["INDEXING", "FAILED", "CANCELLED"],
+      "INDEXING": ["VALIDATING_VERSION", "FAILED", "CANCELLED"],
+      "VALIDATING_VERSION": ["ACTIVATING", "FAILED", "QUARANTINED", "CANCELLED"],
+      "ACTIVATING": ["RECONCILING", "QUARANTINED"],
+      "RECONCILING": ["SUCCEEDED", "QUARANTINED", "ROLLED_BACK"],
+      "QUARANTINED": ["ROLLED_BACK"],
+      "SUCCEEDED": [], "FAILED": [], "CANCELLED": [], "ROLLED_BACK": []
+    },
+    "retry": "Only classified transient failures retry; each stage is idempotent inside one version namespace.",
+    "lease": "Claim with expiry, heartbeat, and monotonically increasing fencing token; reconcile persisted evidence on expiry."
+  },
+  "version": {
+    "initial": "BUILDING",
+    "terminal": ["QUARANTINED", "RETIRED", "DELETED"],
+    "transitions": {
+      "BUILDING": ["VALIDATED", "QUARANTINED"],
+      "VALIDATED": ["CANDIDATE", "QUARANTINED"],
+      "CANDIDATE": ["ACTIVE", "QUARANTINED"],
+      "ACTIVE": ["RETIRED", "QUARANTINED"],
+      "QUARANTINED": ["RETIRED"],
+      "RETIRED": ["DELETED"],
+      "DELETED": []
+    }
+  }
+}

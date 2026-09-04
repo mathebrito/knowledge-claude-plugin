@@ -1,0 +1,40 @@
+{
+  "contract_version": "2.0.0",
+  "collection_scope": "nanolime",
+  "runtime_changes_authorized": false,
+  "resource_limits": {
+    "max_upload_bytes": 52428800,
+    "max_pages": 500,
+    "worker_memory_bytes": 12884901888,
+    "worker_wall_time_seconds": 1200,
+    "global_parser_workers": 1,
+    "worker_cpu_cores": 6,
+    "temporary_disk_bytes": 4294967296,
+    "global_queue_depth": 4,
+    "principal_active_ingests": 1,
+    "principal_derived_storage_bytes": 10737418240,
+    "document_derived_artifact_bytes": 2147483648,
+    "searches_per_minute": 30,
+    "status_reads_per_minute": 10
+  },
+  "retention": {
+    "minimum_active_and_prior_days": 30,
+    "maximum_complete_inactive_versions": 2,
+    "exception_owner": "Matheus",
+    "delete_sequence": ["integrity-scan", "tombstone", "delayed-cleanup", "manifest-audit-log"]
+  },
+  "replay_and_principal_boundary": {
+    "nip98_required": true,
+    "retain_event_id_until_validity_window_expires": true,
+    "reject_replay_before_job_or_search": true,
+    "unknown_cross_principal_or_cross_collection_response": "sanitized-not-found",
+    "collection_selector_accepted": false
+  },
+  "temporary_processing": {
+    "pdf_magic_and_declared_mime_required": true,
+    "encrypted_pdf": "reject-unless-separate-approved-password-flow",
+    "outbound_network": false,
+    "private_temporary_directory": true,
+    "cleanup_after": ["success", "failure", "cancellation", "lease-reconciliation"]
+  }
+}

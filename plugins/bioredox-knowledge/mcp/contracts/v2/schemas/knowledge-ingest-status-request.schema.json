@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2/knowledge-ingest-status-request.schema.json",
+  "title": "knowledge_ingest_status request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "job_id", "auth"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "job_id": {"type": "string", "pattern": "^job_[A-Za-z0-9_-]{16,128}$"},
+    "auth": {
+      "allOf": [
+        {"$ref": "nip98-auth-contract.schema.json#/$defs/request_authentication"},
+        {"properties": {"url": {"const": "/v2/knowledge_ingest_status"}}}
+      ]
+    }
+  }
+}

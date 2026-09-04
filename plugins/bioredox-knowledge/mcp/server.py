@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["httpx>=0.27", "nostr-sdk==0.44.2"]
+# dependencies = ["httpx>=0.27", "jsonschema>=4.21", "nostr-sdk==0.44.2"]
 # ///
 """Local BioRedox Knowledge MCP client with NIP-98 request signing."""
 
@@ -18,9 +18,23 @@ import sys
 import httpx
 
 try:
-    from .nip98 import API_URL, LOCAL_CONFIG, LocalIdentityError, signed_request as _signed_request
+    from . import contract
+    from .nip98 import (
+        API_URL,
+        LOCAL_CONFIG,
+        LocalIdentityError,
+        sign_v2_payload,
+        signed_request as _signed_request,
+    )
 except ImportError:
-    from nip98 import API_URL, LOCAL_CONFIG, LocalIdentityError, signed_request as _signed_request
+    import contract
+    from nip98 import (
+        API_URL,
+        LOCAL_CONFIG,
+        LocalIdentityError,
+        sign_v2_payload,
+        signed_request as _signed_request,
+    )
 
 
 TIMEOUT = 120.0
@@ -94,7 +108,69 @@ TOOLS = [
         "description": "Check the private BioRedox Knowledge API and Qdrant state.",
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "knowledge_ingest_async",
+        "description": (
+            "Queue one approved BioRedox source for asynchronous v2 ingestion and return "
+            "its job ID. The signing key is the principal; no caller identity is accepted."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "source_receipt_id": {
+                    "type": "string",
+                    "description": "Immutable source receipt ID, sr_...",
+                },
+                "source_sha256": {
+                    "type": "string",
+                    "description": "The receipt's file_sha256",
+                },
+                "upload_id": {
+                    "type": "string",
+                    "description": "Upload ID from the authenticated upload, upl_...",
+                },
+                "replace_document_id": {
+                    "type": "string",
+                    "description": "Existing logical document this source replaces, doc_...",
+                },
+            },
+            "required": ["source_receipt_id", "source_sha256", "upload_id"],
+        },
+    },
+    {
+        "name": "knowledge_ingest_status",
+        "description": (
+            "Read the sanitized progress of one BioRedox v2 ingestion job. "
+            "The signing key is the principal; no caller identity is accepted."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "job_id": {
+                    "type": "string",
+                    "description": "Job ID returned by knowledge_ingest_async, job_...",
+                },
+            },
+            "required": ["job_id"],
+        },
+    },
 ]
+
+V2_INGEST_ASYNC_PATH = "/v2/knowledge_ingest_async"
+V2_INGEST_STATUS_PATH = "/v2/knowledge_ingest_status"
+
+# Identity and scope come from the signing key. A caller that supplies either is refused
+# before anything is signed or sent.
+CALLER_FORBIDDEN_KEYS = frozenset(
+    {"auth", "collection", "collections", "principal", "principal_id"}
+)
+
+# ponytail: in-process memory only. A restarted MCP re-submits a receipt it already
+# queued, so the durable idempotency ceiling is the gateway's own (principal,
+# source_receipt_id) key. Persist here only if a restart storm ever proves it matters.
+_JOBS_BY_RECEIPT: dict[str, dict] = {}
 
 
 class ToolExecutionError(RuntimeError):
@@ -250,12 +326,118 @@ async def tool_health(client: httpx.AsyncClient, args: dict) -> str:
     )
 
 
+def _reject_caller_identity(args: dict) -> None:
+    supplied = sorted(CALLER_FORBIDDEN_KEYS.intersection(args))
+    if supplied:
+        raise ToolExecutionError(
+            "The local signing key is the only identity and nanolime the only collection. "
+            f'Remove: {", ".join(supplied)}.'
+        )
+
+
+def _sanitized_failure(response: httpx.Response) -> str:
+    """Surface the server's sanitized v2 message unchanged, or fall back to the status."""
+    try:
+        body = response.json()
+    except ValueError:
+        return f"Knowledge API error ({response.status_code})"
+    message = body.get("message") if isinstance(body, dict) else None
+    return message if isinstance(message, str) else f"Knowledge API error ({response.status_code})"
+
+
+async def _v2_call(
+    client: httpx.AsyncClient,
+    path: str,
+    payload: dict,
+    request_schema: str,
+    response_schema: str,
+) -> dict:
+    """Sign, validate, send, and validate back one sealed v2 request."""
+    auth, authorization = sign_v2_payload(path, payload)
+    body = dict(payload, auth=auth)
+    contract.validate(request_schema, body, "The request")
+    response = await _signed_request(
+        client, "POST", path, json_body=body, authorization=authorization
+    )
+    if response.status_code >= 400:
+        raise ToolExecutionError(_sanitized_failure(response))
+    data = response.json()
+    contract.validate(response_schema, data, "The Knowledge API response")
+    return data
+
+
+async def tool_ingest_async(client: httpx.AsyncClient, args: dict) -> str:
+    _reject_caller_identity(args)
+    receipt_id = args.get("source_receipt_id")
+    held = _JOBS_BY_RECEIPT.get(receipt_id)
+    if held is not None:
+        return (
+            f'Already queued in this session: job {held["job_id"]} '
+            f'for document {held["document_id"]}.'
+        )
+
+    payload = {
+        "schema_version": contract.CONTRACT_VERSION,
+        "source_receipt_id": receipt_id,
+        "source_sha256": args.get("source_sha256"),
+        "content_type": "application/pdf",
+        "upload_id": args.get("upload_id"),
+    }
+    if args.get("replace_document_id"):
+        payload["replace_document_id"] = args["replace_document_id"]
+
+    data = await _v2_call(
+        client,
+        V2_INGEST_ASYNC_PATH,
+        payload,
+        contract.INGEST_ASYNC_REQUEST,
+        contract.INGEST_ASYNC_RESPONSE,
+    )
+    _JOBS_BY_RECEIPT[receipt_id] = data
+    return "\n".join(
+        [
+            f'Job: {data["job_id"]}',
+            f'Document: {data["document_id"]}',
+            f'Accepted: {data["accepted_at"]}',
+            f'Status: {data["status_url"]}',
+        ]
+    )
+
+
+async def tool_ingest_status(client: httpx.AsyncClient, args: dict) -> str:
+    _reject_caller_identity(args)
+    data = await _v2_call(
+        client,
+        V2_INGEST_STATUS_PATH,
+        {"schema_version": contract.CONTRACT_VERSION, "job_id": args.get("job_id")},
+        contract.INGEST_STATUS_REQUEST,
+        contract.INGEST_STATUS_RESPONSE,
+    )
+    lines = [
+        f'Document: {data["document_id"]}',
+        f'State: {data["job_state"]} (stage {data["current_stage"]})',
+    ]
+    if data.get("document_version"):
+        lines.append(f'Version: {data["document_version"]}')
+    if data.get("error_code"):
+        lines.append(f'Error code: {data["error_code"]}')
+    lines.extend(f"Warning: {warning}" for warning in data["warnings"])
+    timings = data["stage_timings_ms"]
+    if timings:
+        lines.append(
+            "Timings (ms): " + ", ".join(f"{stage}={timings[stage]}" for stage in sorted(timings))
+        )
+    return "\n".join(lines)
+
+
 TOOL_MAP = {
     "knowledge_search": tool_search,
     "knowledge_ingest": tool_ingest,
     "knowledge_documents": tool_documents,
     "knowledge_summary": tool_summary,
     "knowledge_health": tool_health,
+    "knowledge_ingest_async": tool_ingest_async,
+    "knowledge_ingest_status": tool_ingest_status,
 }
 
 
@@ -322,7 +504,7 @@ async def main() -> None:
                             "isError": True,
                         },
                     )
-                except ToolExecutionError as exc:
+                except (ToolExecutionError, contract.ContractViolation) as exc:
                     respond(
                         message_id,
                         {

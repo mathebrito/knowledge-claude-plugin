@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2/knowledge-ingest-status-response.schema.json",
+  "title": "knowledge_ingest_status response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "document_id", "job_state", "current_stage", "warnings", "stage_timings_ms"],
+  "properties": {
+    "schema_version": {"const": "2.0.0"},
+    "document_id": {"type": "string", "pattern": "^doc_[A-Za-z0-9_-]{16,128}$"},
+    "job_state": {"enum": ["RECEIVED", "VALIDATING", "PARSING", "DERIVING", "EMBEDDING", "INDEXING", "VALIDATING_VERSION", "ACTIVATING", "RECONCILING", "SUCCEEDED", "FAILED", "CANCELLED", "QUARANTINED", "ROLLED_BACK"]},
+    "current_stage": {"enum": ["RECEIVED", "VALIDATING", "PARSING", "DERIVING", "EMBEDDING", "INDEXING", "VALIDATING_VERSION", "ACTIVATING", "RECONCILING", "SUCCEEDED"]},
+    "warnings": {"type": "array", "items": {"type": "string", "maxLength": 256}},
+    "stage_timings_ms": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "document_version": {"type": "string", "pattern": "^ver_[a-f0-9]{64}$"},
+    "error_code": {"type": "string", "pattern": "^[A-Z0-9_]{3,64}$"}
+  }
+}

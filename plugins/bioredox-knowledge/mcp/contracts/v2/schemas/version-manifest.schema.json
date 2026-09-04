@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2/version-manifest.schema.json",
+  "title": "Immutable v2 document-version manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifest_version", "version_id", "document_id", "principal_id", "collection", "state", "original_file_sha256", "normalized_source_sha256", "source_receipt_id", "reviewed_ficha_linkage_state", "extraction", "tokenizer", "embedding", "identity_rules", "coordinate_system", "integrity", "validation", "trace_id", "fencing_token", "created_at"],
+  "properties": {
+    "manifest_version": {"const": "2.0.0"},
+    "version_id": {"type": "string", "pattern": "^ver_[a-f0-9]{64}$"},
+    "document_id": {"type": "string", "pattern": "^doc_[A-Za-z0-9_-]{16,128}$"},
+    "principal_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "collection": {"const": "nanolime"},
+    "state": {"enum": ["BUILDING", "VALIDATED", "CANDIDATE", "ACTIVE", "QUARANTINED", "RETIRED", "DELETED"]},
+    "original_file_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "normalized_source_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source_receipt_id": {"type": "string", "pattern": "^sr_[A-Za-z0-9_-]{16,128}$"},
+    "reviewed_ficha_linkage_state": {"enum": ["reviewed", "pending_canonical_evidence"]},
+    "extraction": {"type": "object", "additionalProperties": false, "required": ["schema_version", "docling_version", "option_digest"], "properties": {"schema_version": {"type": "string", "minLength": 1}, "docling_version": {"type": "string", "minLength": 1}, "option_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}},
+    "tokenizer": {"type": "object", "additionalProperties": false, "required": ["name", "revision"], "properties": {"name": {"type": "string", "minLength": 1}, "revision": {"type": "string", "minLength": 1}}},
+    "embedding": {"type": "object", "additionalProperties": false, "required": ["model", "revision"], "properties": {"model": {"type": "string", "minLength": 1}, "revision": {"type": "string", "minLength": 1}}},
+    "identity_rules": {"type": "object", "additionalProperties": false, "required": ["version", "item", "point"], "properties": {"version": {"const": "sha256(logical_document_id, normalized_source_sha256, extraction_schema, docling_version, docling_option_digest, tokenizer_revision, embedding_revision)"}, "item": {"const": "sha256(version_id, item_type, page_index, canonical_coordinates, stable_structure_path)"}, "point": {"const": "sha256(item_id, chunk_ordinal)"}}},
+    "coordinate_system": {"type": "object", "additionalProperties": false, "required": ["page_index_base", "rotation_applied", "origin", "units", "page_dimensions"], "properties": {"page_index_base": {"const": 0}, "rotation_applied": {"type": "boolean"}, "origin": {"const": "top-left"}, "units": {"const": "points"}, "page_dimensions": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["page_index", "width", "height"], "properties": {"page_index": {"type": "integer", "minimum": 0}, "width": {"type": "number", "exclusiveMinimum": 0}, "height": {"type": "number", "exclusiveMinimum": 0}}}}}},
+    "integrity": {"type": "object", "additionalProperties": false, "required": ["qdrant_point_count", "gridfs_asset_count", "projection_count", "table_structure_digest", "crop_digest", "content_digest", "asset_references", "integrity_digest"], "properties": {"qdrant_point_count": {"type": "integer", "minimum": 0}, "gridfs_asset_count": {"type": "integer", "minimum": 0}, "projection_count": {"type": "integer", "minimum": 0}, "table_structure_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "crop_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "content_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "asset_references": {"type": "array", "items": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}}, "integrity_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}},
+    "validation": {"type": "object", "additionalProperties": false, "required": ["result", "warnings"], "properties": {"result": {"enum": ["passed", "failed"]}, "warnings": {"type": "array", "items": {"type": "string", "maxLength": 256}}}},
+    "trace_id": {"type": "string", "minLength": 16, "maxLength": 128},
+    "fencing_token": {"type": "integer", "minimum": 1},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

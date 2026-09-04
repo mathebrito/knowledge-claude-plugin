@@ -1,0 +1,18 @@
+{
+  "contract_version": "2.0.0",
+  "roles": [
+    {"role": "Matheus", "owns": ["public-contract-approval", "retention-exceptions", "production-activation", "production-rollback", "holdout-custodian-delegation"]},
+    {"role": "BioRedox import workflow", "owns": ["reviewed-ficha", "source-receipt-issuance", "canonical-evidence-gate"]},
+    {"role": "Knowledge v2 gateway", "owns": ["receipt-lookup", "receipt-hash-principal-collection-validation", "principal-binding", "replay-rejection", "sanitized-not-found"]},
+    {"role": "Knowledge v2 worker", "owns": ["version-namespace-isolation", "stage-evidence", "manifest-and-pointer-reconciliation", "temporary-file-cleanup"]},
+    {"role": "operator", "owns": ["stuck-lease-recovery", "audited-post-activation-rollback", "delayed-cleanup"]},
+    {"role": "independent-reviewer", "owns": ["exact-commit-review"]},
+    {"role": "holdout-custodian", "owns": ["lawful-unseen-holdout-custody", "preimplementation-hash-and-answer-key-seal", "post-freeze-release"]}
+  ],
+  "prohibited_ownership": [
+    "engine-writes-bioredox-repository",
+    "public-tool-creates-or-mutates-source-receipt",
+    "document-submitter-invokes-post-activation-rollback",
+    "implementer-accesses-holdout-bytes-or-answer-key"
+  ]
+}

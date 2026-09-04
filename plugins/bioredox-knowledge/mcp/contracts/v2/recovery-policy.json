@@ -1,0 +1,18 @@
+{
+  "contract_version": "2.0.0",
+  "pointer_compare_and_swap": {
+    "required_preconditions": [
+      "document_id",
+      "principal_id",
+      "collection",
+      "expected_pointer_revision"
+    ],
+    "on_mismatch": "refuse-without-pointer-mutation",
+    "promotion": "candidate-becomes-active-only-after-successful-compare-and-swap"
+  },
+  "first_ingest_rollback": {
+    "prior_version": null,
+    "pointer_result": "no-active-or-candidate-version",
+    "document_id_generation": "cryptographically-random-no-deterministic-formula"
+  }
+}

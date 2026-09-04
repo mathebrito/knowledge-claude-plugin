@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2/job-record.schema.json",
+  "title": "Durable v2 ingestion job record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job_id", "document_id", "principal_id", "collection", "source_receipt_id", "state", "stage", "fencing_token", "trace_id"],
+  "properties": {
+    "job_id": {"type": "string", "pattern": "^job_[A-Za-z0-9_-]{16,128}$"},
+    "document_id": {"type": "string", "pattern": "^doc_[A-Za-z0-9_-]{16,128}$"},
+    "principal_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "collection": {"const": "nanolime"},
+    "source_receipt_id": {"type": "string", "pattern": "^sr_[A-Za-z0-9_-]{16,128}$"},
+    "state": {"enum": ["RECEIVED", "VALIDATING", "PARSING", "DERIVING", "EMBEDDING", "INDEXING", "VALIDATING_VERSION", "ACTIVATING", "RECONCILING", "SUCCEEDED", "FAILED", "CANCELLED", "QUARANTINED", "ROLLED_BACK"]},
+    "stage": {"enum": ["RECEIVED", "VALIDATING", "PARSING", "DERIVING", "EMBEDDING", "INDEXING", "VALIDATING_VERSION", "ACTIVATING", "RECONCILING", "SUCCEEDED"]},
+    "fencing_token": {"type": "integer", "minimum": 1},
+    "lease_expires_at": {"type": "string", "format": "date-time"},
+    "trace_id": {"type": "string", "minLength": 16, "maxLength": 128}
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "contract_version": "2.1",
+  "response_schema": "schemas/knowledge-error-response.schema.json",
+  "rejection_order_source": "schemas/nip98-auth-contract.schema.json#/x-contract/rejection_order",
+  "sanitized_response_rules": [
+    "no identifier of any kind is echoed back to the caller",
+    "no record state, existence signal, or failure reason beyond the fixed error code and its fixed message",
+    "an unknown identifier and a cross-principal or cross-collection identifier return one byte-identical response"
+  ],
+  "cases": [
+    {
+      "case": "disallowed-principal",
+      "tools": [
+        "knowledge_ingest_async",
+        "knowledge_ingest_status",
+        "knowledge_search_v2"
+      ],
+      "trigger": "the NIP-98 principal is not on the server-configured allowlist",
+      "fixture": "fixtures/negative/disallowed-principal.json",
+      "rejected_at": "principal-or-collection-allowlist",
+      "guarantees": [
+        "no-record-lookup",
+        "no-job-created",
+        "no-action-performed"
+      ]
+    },
+    {
+      "case": "replayed-event-id",
+      "tools": [
+        "knowledge_ingest_async",
+        "knowledge_ingest_status",
+        "knowledge_search_v2"
+      ],
+      "trigger": "the NIP-98 event ID is still retained inside its validity window",
+      "fixture": "fixtures/negative/replayed-event.json",
+      "rejected_at": "event_id_replay",
+      "guarantees": [
+        "no-job-created",
+        "no-search-executed",
+        "no-action-performed"
+      ]
+    },
+    {
+      "case": "quota-refused-before-action",
+      "tools": [
+        "knowledge_ingest_async",
+        "knowledge_search_v2"
+      ],
+      "trigger": "an authenticated allowed principal is over a declared policy.json resource limit",
+      "fixture": "fixtures/negative/quota-refused-before-action.json",
+      "rejected_at": "quota",
+      "guarantees": [
+        "no-job-created",
+        "no-search-executed",
+        "no-action-performed"
+      ]
+    },
+    {
+      "case": "sanitized-not-found-unknown-document",
+      "tools": [
+        "knowledge_ingest_status",
+        "knowledge_search_v2"
+      ],
+      "trigger": "the identifier names no record at all",
+      "fixture": "fixtures/negative/not-found-unknown-document.json",
+      "rejected_at": "action",
+      "guarantees": [
+        "no-existence-signal",
+        "no-pointer-mutation"
+      ],
+      "byte_identical_with": "fixtures/negative/not-found-foreign-document.json"
+    },
+    {
+      "case": "sanitized-not-found-foreign-document",
+      "tools": [
+        "knowledge_ingest_status",
+        "knowledge_search_v2"
+      ],
+      "trigger": "the identifier names a record owned by another principal or another collection",
+      "fixture": "fixtures/negative/not-found-foreign-document.json",
+      "rejected_at": "action",
+      "guarantees": [
+        "no-existence-signal",
+        "no-pointer-mutation"
+      ],
+      "byte_identical_with": "fixtures/negative/not-found-unknown-document.json"
+    }
+  ]
+}

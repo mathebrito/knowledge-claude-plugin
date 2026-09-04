@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2/document-pointer.schema.json",
+  "title": "Mutable active-version pointer",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["document_id", "principal_id", "collection", "active_version", "prior_version", "candidate_version", "pointer_revision"],
+  "properties": {
+    "document_id": {"type": "string", "pattern": "^doc_[A-Za-z0-9_-]{16,128}$"},
+    "principal_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "collection": {"const": "nanolime"},
+    "active_version": {"type": ["string", "null"], "pattern": "^ver_[a-f0-9]{64}$"},
+    "prior_version": {"type": ["string", "null"], "pattern": "^ver_[a-f0-9]{64}$"},
+    "candidate_version": {"type": ["string", "null"], "pattern": "^ver_[a-f0-9]{64}$"},
+    "pointer_revision": {"type": "integer", "minimum": 0}
+  }
+}

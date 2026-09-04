@@ -33,6 +33,10 @@ API_URL = os.getenv(
 ).rstrip("/")
 
 
+V2_VALIDITY_SECONDS = 60
+V2_COLLECTION = "nanolime"
+
+
 class LocalIdentityError(RuntimeError):
     """The local signer could not obtain a valid Nostr private key."""
 
@@ -79,6 +83,10 @@ def _load_local_keys() -> Keys:
         raise LocalIdentityError("The local Nostr secret provider returned an invalid key") from exc
 
 
+def _token(event) -> str:
+    return f"Nostr {base64.b64encode(event.as_json().encode()).decode()}"
+
+
 def _authorization(method: str, url: str, body: bytes) -> str:
     tags = [Tag.parse(["u", url]), Tag.parse(["method", method.upper()])]
     if body:
@@ -89,8 +97,53 @@ def _authorization(method: str, url: str, body: bytes) -> str:
         .custom_created_at(Timestamp.from_secs(int(time.time())))
         .sign_with_keys(_load_local_keys())
     )
-    token = base64.b64encode(event.as_json().encode()).decode()
-    return f"Nostr {token}"
+    return _token(event)
+
+
+def canonical_payload(payload: dict) -> bytes:
+    """Canonical JSON for one v2 request body with its `auth` block excluded."""
+    # ponytail: every field the sealed v2 request schemas allow is a string, which makes
+    # sorted compact JSON byte-identical to RFC 8785. Bring in a JCS library if a number,
+    # a float, or a non-BMP escape ever enters a v2 request body.
+    return json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode()
+
+
+def sign_v2_payload(url_path: str, payload: dict) -> tuple[dict, str]:
+    """Sign a v2 payload; return its contract `auth` block and matching Authorization header.
+
+    The contract binds the NIP-98 event to the canonical payload excluding `auth`, so one
+    event covers both the header and the mirrored `auth` block. The principal is always the
+    local signing key: no caller ever supplies it.
+    """
+    keys = _load_local_keys()
+    payload_sha256 = hashlib.sha256(canonical_payload(payload)).hexdigest()
+    created_at = int(time.time())
+    event = (
+        EventBuilder(Kind(27235), "")
+        .tags(
+            [
+                Tag.parse(["u", f"{API_URL}{url_path}"]),
+                Tag.parse(["method", "POST"]),
+                Tag.parse(["payload", payload_sha256]),
+            ]
+        )
+        .custom_created_at(Timestamp.from_secs(created_at))
+        .sign_with_keys(keys)
+    )
+    auth = {
+        "event_id": event.id().to_hex(),
+        "principal_id": keys.public_key().to_hex(),
+        "method": "POST",
+        "url": url_path,
+        "created_at": created_at,
+        "expires_at": created_at + V2_VALIDITY_SECONDS,
+        "payload_canonicalization": "rfc8785-json-excluding-auth",
+        "payload_sha256": payload_sha256,
+        "collection": V2_COLLECTION,
+    }
+    return auth, _token(event)
 
 
 async def signed_request(
@@ -103,6 +156,7 @@ async def signed_request(
     content: bytes | None = None,
     headers: dict[str, str] | None = None,
     timeout: float = 120.0,
+    authorization: str | None = None,
 ) -> httpx.Response:
     request = client.build_request(
         method,
@@ -113,7 +167,7 @@ async def signed_request(
         headers=headers,
         timeout=timeout,
     )
-    request.headers["Authorization"] = _authorization(
+    request.headers["Authorization"] = authorization or _authorization(
         method, str(request.url), request.content
     )
     return await client.send(request)
