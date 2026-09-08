@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["httpx>=0.27", "jsonschema>=4.21", "nostr-sdk==0.44.2"]
+# dependencies = ["httpx>=0.27", "jsonschema>=4.21", "nostr-sdk==0.44.2", "rfc8785==0.1.4"]
 # ///
 """Local BioRedox Knowledge MCP client with NIP-98 request signing."""
 
