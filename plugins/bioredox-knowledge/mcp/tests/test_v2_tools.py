@@ -138,6 +138,12 @@ def test_ingest_async_sends_the_sealed_request_shape_and_reads_the_sealed_respon
         assert auth[field] == sealed_request["auth"][field]
 
 
+def test_canonical_payload_uses_rfc8785_number_and_unicode_rules():
+    assert nip98.canonical_payload({"top_k": 1.0, "zero": -0.0, "text": "é"}) == (
+        b'{"text":"\xc3\xa9","top_k":1,"zero":0}'
+    )
+
+
 def test_ingest_status_reads_the_sealed_status_response():
     sealed_request = load(V2_FIXTURES / "ingest-status-request.json")
     sealed_response = load(V2_FIXTURES / "ingest-status-response.json")

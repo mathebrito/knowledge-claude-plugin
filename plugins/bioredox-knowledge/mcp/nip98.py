@@ -13,6 +13,7 @@ import time
 
 import httpx
 from nostr_sdk import EventBuilder, Keys, Kind, Tag, Timestamp
+import rfc8785
 
 
 CONFIG_PATH = Path(__file__).with_name("local-config.json")
@@ -102,13 +103,7 @@ def _authorization(method: str, url: str, body: bytes) -> str:
 
 def canonical_payload(payload: dict) -> bytes:
     """Canonical JSON for one v2 request body with its `auth` block excluded."""
-    # ponytail: the sealed v2 request schemas allow only strings and small bounded
-    # integers, whose shortest form is the same in json.dumps and RFC 8785, so sorted
-    # compact JSON is byte-identical. Bring in a JCS library if a float, a large integer,
-    # or a non-BMP escape ever enters a v2 request body.
-    return json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode()
+    return rfc8785.dumps(payload)
 
 
 def sign_v2_payload(url_path: str, payload: dict) -> tuple[dict, str]:
