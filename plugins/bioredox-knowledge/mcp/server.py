@@ -509,12 +509,21 @@ async def _issue_source(args: dict) -> dict:
         )
         stdout, _stderr = await asyncio.wait_for(process.communicate(), timeout=120)
     except asyncio.TimeoutError as exc:
-        if process is not None:
-            process.kill()
-            await process.wait()
         raise ToolExecutionError("The Acervo source import workflow is unavailable") from exc
     except OSError as exc:
         raise ToolExecutionError("The Acervo source import workflow is unavailable") from exc
+    finally:
+        # `communicate` can be interrupted by caller cancellation or fail after
+        # the issuer has started its Mongo write. Contain and reap the child on
+        # every unfinished exit; never leave an unobserved writer running.
+        if process is not None and process.returncode is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                # It exited between the return-code check and the signal. It
+                # still needs `wait` below so the transport is reaped.
+                pass
+            await process.wait()
     if process.returncode != 0:
         raise ToolExecutionError("The Acervo source import workflow refused the source")
     try:

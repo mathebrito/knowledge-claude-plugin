@@ -276,6 +276,46 @@ def test_acervo_import_workflow_issues_then_queues_without_caller_identity(
     assert "principal_id" not in {key for key in sent if key != "auth"}
 
 
+def test_cancelled_acervo_import_kills_and_reaps_the_issuer(monkeypatch):
+    class HeldIssuer:
+        returncode = None
+
+        def __init__(self):
+            self.started = asyncio.Event()
+            self.killed = False
+            self.waited = False
+
+        async def communicate(self):
+            self.started.set()
+            await asyncio.Event().wait()
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+        async def wait(self):
+            self.waited = True
+            return self.returncode
+
+    async def exercise():
+        issuer = HeldIssuer()
+
+        async def create(*_args, **_kwargs):
+            return issuer
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
+        task = asyncio.create_task(server._issue_source({}))
+        await issuer.started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return issuer
+
+    issuer = run(exercise())
+    assert issuer.killed is True
+    assert issuer.waited is True
+
+
 def test_acervo_import_tool_is_absent_without_managed_service_identity():
     if server.ACERVO_IMPORT_ENABLED:
         pytest.skip("test process is intentionally configured as Acervo")
