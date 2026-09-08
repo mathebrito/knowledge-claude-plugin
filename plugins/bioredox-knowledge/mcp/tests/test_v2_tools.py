@@ -18,6 +18,8 @@ sys.path.insert(0, str(PLUGIN_ROOT))
 
 from mcp import contract, nip98, server  # noqa: E402
 
+LOAD_LOCAL_KEYS = nip98._load_local_keys
+
 
 V2_FIXTURES = contract.V2 / "fixtures"
 # The sealed v2 release declares no error-response schema. v2.1 proposes one and freezes
@@ -142,6 +144,56 @@ def test_canonical_payload_uses_rfc8785_number_and_unicode_rules():
     assert nip98.canonical_payload({"top_k": 1.0, "zero": -0.0, "text": "é"}) == (
         b'{"text":"\xc3\xa9","top_k":1,"zero":0}'
     )
+
+
+def test_managed_service_identity_uses_one_private_mode_0600_file(tmp_path: Path):
+    expected = Keys.generate()
+    identity = tmp_path / "acervo.env"
+    identity.write_text(
+        "# existing managed service identity\n"
+        f"export BUZZ_PRIVATE_KEY={expected.secret_key().to_bech32()}\n"
+    )
+    identity.chmod(0o600)
+
+    loaded = nip98._load_managed_identity(str(identity))
+
+    assert loaded.public_key().to_hex() == expected.public_key().to_hex()
+    identity.chmod(0o640)
+    with pytest.raises(nip98.LocalIdentityError, match="unavailable"):
+        nip98._load_managed_identity(str(identity))
+
+
+def test_explicit_managed_identity_bypasses_keychain(
+    tmp_path: Path, monkeypatch
+):
+    expected = Keys.generate()
+    identity = tmp_path / "acervo.env"
+    identity.write_text(f"BUZZ_PRIVATE_KEY={expected.secret_key().to_bech32()}\n")
+    identity.chmod(0o600)
+    monkeypatch.setenv("KNOWLEDGE_NIP98_IDENTITY_FILE", str(identity))
+    monkeypatch.setattr(
+        nip98.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("keychain must not be read"),
+    )
+
+    assert LOAD_LOCAL_KEYS().public_key().to_hex() == expected.public_key().to_hex()
+
+
+def test_default_identity_provider_remains_the_macos_keychain(monkeypatch):
+    monkeypatch.delenv("KNOWLEDGE_NIP98_IDENTITY_FILE", raising=False)
+    observed = {}
+
+    def fake_run(argv, **kwargs):
+        observed["argv"] = argv
+        return __import__("subprocess").CompletedProcess(
+            argv, 1, stdout="", stderr="missing"
+        )
+
+    monkeypatch.setattr(nip98.subprocess, "run", fake_run)
+    with pytest.raises(nip98.LocalIdentityError):
+        nip98._load_keychain_identity()
+    assert observed["argv"][0] == "/usr/bin/security"
 
 
 def test_ingest_status_reads_the_sealed_status_response():

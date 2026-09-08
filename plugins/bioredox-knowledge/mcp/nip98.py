@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import stat
 import subprocess
 import time
 
@@ -42,8 +44,49 @@ class LocalIdentityError(RuntimeError):
     """The local signer could not obtain a valid Nostr private key."""
 
 
-def _load_local_keys() -> Keys:
-    """Read the nsec only from the local macOS Keychain."""
+def _load_managed_identity(path_value: str) -> Keys:
+    path = Path(path_value).expanduser()
+    if not path.is_absolute():
+        raise LocalIdentityError("The managed Nostr identity path must be absolute")
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise LocalIdentityError("The managed Nostr identity is unavailable") from exc
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISREG(info.st_mode)
+        or stat.S_IMODE(info.st_mode) & 0o077
+    ):
+        raise LocalIdentityError("The managed Nostr identity is unavailable")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise LocalIdentityError("The managed Nostr identity is unavailable") from exc
+    private_values: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("export "):
+            stripped = stripped.removeprefix("export ").lstrip()
+        key, separator, raw_value = stripped.partition("=")
+        if not separator or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) is None:
+            raise LocalIdentityError("The managed Nostr identity is invalid")
+        value = raw_value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        if key == "BUZZ_PRIVATE_KEY":
+            private_values.append(value)
+    if len(private_values) != 1 or not private_values[0]:
+        raise LocalIdentityError("The managed Nostr identity is unavailable")
+    try:
+        return Keys.parse(private_values[0])
+    except Exception as exc:
+        raise LocalIdentityError("The managed Nostr identity is invalid") from exc
+
+
+def _load_keychain_identity() -> Keys:
+    """Read an interactive user's Nostr identity from the local macOS Keychain."""
     account = (
         os.getenv("KNOWLEDGE_NSEC_KEYCHAIN_ACCOUNT", "").strip()
         or LOCAL_CONFIG.get("keychain_account", "").strip()
@@ -82,6 +125,14 @@ def _load_local_keys() -> Keys:
         return Keys.parse(lines[0])
     except Exception as exc:
         raise LocalIdentityError("The local Nostr secret provider returned an invalid key") from exc
+
+
+def _load_local_keys() -> Keys:
+    """Use an explicit managed service file, otherwise the local macOS Keychain."""
+    identity_file = os.getenv("KNOWLEDGE_NIP98_IDENTITY_FILE", "").strip()
+    if identity_file:
+        return _load_managed_identity(identity_file)
+    return _load_keychain_identity()
 
 
 def _token(event) -> str:
