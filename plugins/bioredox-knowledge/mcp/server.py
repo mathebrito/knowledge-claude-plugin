@@ -187,6 +187,58 @@ TOOLS = [
 V2_INGEST_ASYNC_PATH = "/v2/knowledge_ingest_async"
 V2_INGEST_STATUS_PATH = "/v2/knowledge_ingest_status"
 V2_SEARCH_PATH = "/v2/knowledge_search_v2"
+SOURCE_ISSUER_ROOT = Path(
+    os.getenv("KNOWLEDGE_SOURCE_ISSUER_ROOT", "/Users/tejo/src/tejo-infra")
+).expanduser()
+SOURCE_ISSUER_PYTHON = Path(
+    os.getenv(
+        "KNOWLEDGE_SOURCE_ISSUER_PYTHON",
+        "/Users/tejo/src/tejo-infra/knowledge/venv/bin/python3",
+    )
+).expanduser()
+ACERVO_IMPORT_ENABLED = bool(
+    os.getenv("KNOWLEDGE_NIP98_IDENTITY_FILE", "").strip()
+) and os.getenv("KNOWLEDGE_V2_IMPORT_ENABLED") == "1"
+
+if ACERVO_IMPORT_ENABLED:
+    TOOLS.append(
+        {
+            "name": "knowledge_ingest_v2",
+            "description": (
+                "Issue an immutable source receipt through the local Acervo import "
+                "workflow, then queue the PDF for Knowledge v2 ingestion."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "file_path": {"type": "string"},
+                    "reviewed_ficha_repository_commit": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{40}$",
+                    },
+                    "reviewed_ficha_path": {"type": "string", "minLength": 1},
+                    "reviewed_ficha_linkage_state": {
+                        "enum": ["reviewed", "pending_canonical_evidence"],
+                        "default": "pending_canonical_evidence",
+                    },
+                    "lawful_use_decision": {
+                        "enum": [
+                            "approved",
+                            "approved-with-retention-condition",
+                        ],
+                        "default": "approved-with-retention-condition",
+                    },
+                    "replace_document_id": {"type": "string"},
+                },
+                "required": [
+                    "file_path",
+                    "reviewed_ficha_repository_commit",
+                    "reviewed_ficha_path",
+                ],
+            },
+        }
+    )
 
 # Identity and scope come from the signing key. A caller that supplies either is refused
 # before anything is signed or sent.
@@ -431,6 +483,83 @@ async def tool_ingest_async(client: httpx.AsyncClient, args: dict) -> str:
     )
 
 
+async def _issue_source(args: dict) -> dict:
+    argv = [
+        str(SOURCE_ISSUER_PYTHON),
+        "-m",
+        "knowledge.source_issuer",
+        "--source",
+        str(args.get("file_path", "")),
+        "--repository-commit",
+        str(args.get("reviewed_ficha_repository_commit", "")),
+        "--ficha-path",
+        str(args.get("reviewed_ficha_path", "")),
+        "--linkage-state",
+        str(args.get("reviewed_ficha_linkage_state", "pending_canonical_evidence")),
+        "--lawful-use-decision",
+        str(args.get("lawful_use_decision", "approved-with-retention-condition")),
+    ]
+    process = None
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *argv,
+            cwd=SOURCE_ISSUER_ROOT,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+    except asyncio.TimeoutError as exc:
+        if process is not None:
+            process.kill()
+            await process.wait()
+        raise ToolExecutionError("The Acervo source import workflow is unavailable") from exc
+    except OSError as exc:
+        raise ToolExecutionError("The Acervo source import workflow is unavailable") from exc
+    if process.returncode != 0:
+        raise ToolExecutionError("The Acervo source import workflow refused the source")
+    try:
+        admitted = json.loads(stdout)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ToolExecutionError("The Acervo source import workflow returned invalid data") from exc
+    required = {"source_receipt_id", "upload_id", "source_sha256", "content_type"}
+    if (
+        not isinstance(admitted, dict)
+        or admitted.get("status") != "issued"
+        or not required.issubset(admitted)
+        or admitted.get("content_type") != "application/pdf"
+    ):
+        raise ToolExecutionError("The Acervo source import workflow returned invalid data")
+    return admitted
+
+
+async def tool_ingest_v2(client: httpx.AsyncClient, args: dict) -> str:
+    """Run the local issuer, then submit only its returned opaque references."""
+    _reject_caller_identity(args)
+    if not ACERVO_IMPORT_ENABLED:
+        raise ToolExecutionError("The Acervo source import workflow is unavailable")
+    admitted = await _issue_source(args)
+    queued = await tool_ingest_async(
+        client,
+        {
+            "source_receipt_id": admitted["source_receipt_id"],
+            "source_sha256": admitted["source_sha256"],
+            "upload_id": admitted["upload_id"],
+            **(
+                {"replace_document_id": args["replace_document_id"]}
+                if args.get("replace_document_id")
+                else {}
+            ),
+        },
+    )
+    return "\n".join(
+        [
+            f'Source receipt: {admitted["source_receipt_id"]}',
+            f'Upload: {admitted["upload_id"]}',
+            queued,
+        ]
+    )
+
+
 async def tool_ingest_status(client: httpx.AsyncClient, args: dict) -> str:
     _reject_caller_identity(args)
     data = await _v2_call(
@@ -521,6 +650,8 @@ TOOL_MAP = {
     "knowledge_ingest_status": tool_ingest_status,
     "knowledge_search_v2": tool_search_v2,
 }
+if ACERVO_IMPORT_ENABLED:
+    TOOL_MAP["knowledge_ingest_v2"] = tool_ingest_v2
 
 
 def read_message():

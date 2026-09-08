@@ -237,6 +237,52 @@ def test_a_replacement_carries_the_prior_document_id():
     assert json.loads(calls[0].content)["replace_document_id"] == prior
 
 
+def test_acervo_import_workflow_issues_then_queues_without_caller_identity(
+    monkeypatch,
+):
+    sealed_response = load(V2_FIXTURES / "ingest-async-response.json")
+    handler, calls = responder(sealed_response, 202)
+    admission = {
+        "status": "issued",
+        "source_receipt_id": "sr_localissuer00000001",
+        "upload_id": "upl_localissuer0000001",
+        "source_sha256": "d" * 64,
+        "content_type": "application/pdf",
+    }
+
+    async def issue(_args):
+        return admission
+
+    monkeypatch.setattr(server, "ACERVO_IMPORT_ENABLED", True)
+    monkeypatch.setattr(server, "_issue_source", issue)
+    text = run(
+        call(
+            server.tool_ingest_v2,
+            handler,
+            {
+                "file_path": "/approved/source.pdf",
+                "reviewed_ficha_repository_commit": "1" * 40,
+                "reviewed_ficha_path": "03-research/evidence/source.md",
+            },
+        )
+    )
+
+    assert admission["source_receipt_id"] in text
+    assert sealed_response["job_id"] in text
+    sent = json.loads(calls[0].content)
+    assert sent["source_receipt_id"] == admission["source_receipt_id"]
+    assert sent["upload_id"] == admission["upload_id"]
+    assert sent["source_sha256"] == admission["source_sha256"]
+    assert "principal_id" not in {key for key in sent if key != "auth"}
+
+
+def test_acervo_import_tool_is_absent_without_managed_service_identity():
+    if server.ACERVO_IMPORT_ENABLED:
+        pytest.skip("test process is intentionally configured as Acervo")
+    assert "knowledge_ingest_v2" not in {tool["name"] for tool in server.TOOLS}
+    assert "knowledge_ingest_v2" not in server.TOOL_MAP
+
+
 # --- idempotent submission -------------------------------------------------------------
 
 
