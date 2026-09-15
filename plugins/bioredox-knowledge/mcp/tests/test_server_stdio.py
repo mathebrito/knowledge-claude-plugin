@@ -213,6 +213,7 @@ def test_stdio_process_lists_and_executes_five_signed_tools(
             "knowledge_ingest_async",
             "knowledge_ingest_status",
             "knowledge_search_v2",
+            "knowledge_search_v2_2",
         }
         assert all("collection" not in tool["inputSchema"]["properties"] for tool in tools)
         assert all("collections" not in tool["inputSchema"]["properties"] for tool in tools)

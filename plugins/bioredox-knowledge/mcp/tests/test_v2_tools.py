@@ -149,6 +149,28 @@ def test_canonical_payload_uses_rfc8785_number_and_unicode_rules():
     )
 
 
+def test_v2_2_search_displays_the_signed_original_filename():
+    request_fixture = load(V22_FIXTURES / "search-v2-request.json")
+    response_fixture = load(V22_FIXTURES / "search-v2-response.json")
+    handler, calls = responder(response_fixture)
+
+    text = run(
+        call(
+            server.tool_search_v22,
+            handler,
+            {
+                "document_id": request_fixture["document_id"],
+                "query": request_fixture["query"],
+            },
+        )
+    )
+
+    assert "Source file: assay-source.pdf" in text
+    sent = json.loads(calls[0].content)
+    assert sent["schema_version"] == "2.2.0"
+    assert sent["document_id"] == request_fixture["document_id"]
+
+
 def test_managed_service_identity_uses_one_private_mode_0600_file(tmp_path: Path):
     expected = Keys.generate()
     identity = tmp_path / "acervo.env"
