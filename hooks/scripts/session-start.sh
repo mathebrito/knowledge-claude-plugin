@@ -15,13 +15,13 @@ json_escape() {
   printf '%s' "$s"
 }
 
-# --- 1+2. Knowledge host (tejo/mini2025) + Knowledge API ---
+# --- 1+2. Knowledge host (tejo/lxbook) + Knowledge API ---
 # Probe the service itself first — that is what sessions actually need — then
 # diagnose transport only on failure. MagicDNS name survives IP churn; the raw
 # tailnet IP is the fallback when MagicDNS is unavailable.
 # (2026-08-02: replaced hardcoded 100.97.71.49 — a stale IP from tejo's old
 # duplicate device registration — which made every banner report UNREACHABLE.)
-KNOWLEDGE_HOST="matbookpro16.beago-quail.ts.net"
+KNOWLEDGE_HOST="lxbook.beago-quail.ts.net"
 KNOWLEDGE_IP="100.124.122.92"
 
 health_json=$(curl -sf "http://${KNOWLEDGE_HOST}:6380/health" --max-time 5 2>/dev/null \
