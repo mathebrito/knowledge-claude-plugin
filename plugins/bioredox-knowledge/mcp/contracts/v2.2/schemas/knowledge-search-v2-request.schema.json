@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2.2/knowledge-search-v2-request.schema.json",
+  "title": "knowledge_search_v2 request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document_id",
+    "query",
+    "auth"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.2.0"
+    },
+    "document_id": {
+      "type": "string",
+      "pattern": "^doc_[A-Za-z0-9_-]{16,128}$"
+    },
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "top_k": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 5
+    },
+    "auth": {
+      "allOf": [
+        {
+          "$ref": "nip98-auth-contract.schema.json#/$defs/request_authentication"
+        },
+        {
+          "properties": {
+            "url": {
+              "const": "/v2/knowledge_search_v2"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

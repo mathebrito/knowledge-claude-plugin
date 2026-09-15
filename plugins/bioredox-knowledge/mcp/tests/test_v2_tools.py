@@ -22,6 +22,8 @@ LOAD_LOCAL_KEYS = nip98._load_local_keys
 
 
 V2_FIXTURES = contract.V2 / "fixtures"
+V22_FIXTURES = contract.V22 / "fixtures"
+SOURCE_ADMISSION_V22_FIXTURES = contract.SOURCE_ADMISSION_V22 / "fixtures"
 # The sealed v2 release declares no error-response schema. v2.1 proposes one and freezes
 # the sanitized bodies below; they are the reference shapes here, not a sealed contract.
 NEGATIVE_FIXTURES = contract.V2.with_name("v2.1") / "fixtures" / "negative"
@@ -78,6 +80,7 @@ async def call(tool, handler, args: dict) -> str:
 
 def test_the_sealed_contract_copy_matches_the_sealed_manifest():
     assert contract.manifest_drift() == []
+    assert contract.candidate_manifest_drift() == []
 
 
 def test_the_declared_v1_tools_are_byte_identical_to_the_frozen_snapshot():
@@ -237,30 +240,37 @@ def test_a_replacement_carries_the_prior_document_id():
     assert json.loads(calls[0].content)["replace_document_id"] == prior
 
 
-def test_acervo_import_workflow_issues_then_queues_without_caller_identity(
-    monkeypatch,
+def test_acervo_import_launches_public_admission_queue_and_get_status(
+    monkeypatch, tmp_path: Path
 ):
-    sealed_response = load(V2_FIXTURES / "ingest-async-response.json")
-    handler, calls = responder(sealed_response, 202)
-    admission = {
-        "status": "issued",
-        "source_receipt_id": "sr_localissuer00000001",
-        "upload_id": "upl_localissuer0000001",
-        "source_sha256": "d" * 64,
-        "content_type": "application/pdf",
-    }
+    admission = load(
+        SOURCE_ADMISSION_V22_FIXTURES / "source-admission-response.json"
+    )
+    queued = load(V22_FIXTURES / "ingest-async-response.json")
+    current = load(V2_FIXTURES / "ingest-status-response.json")
+    calls: list[httpx.Request] = []
 
-    async def issue(_args):
-        return admission
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if request.url.path == server.SOURCE_ADMIT_PATH:
+            return httpx.Response(201, json=admission)
+        if request.url.path == server.V2_INGEST_ASYNC_PATH:
+            return httpx.Response(202, json=queued)
+        if request.url.path == queued["status_url"]:
+            return httpx.Response(200, json=current)
+        raise AssertionError(f"unexpected request {request.method} {request.url.path}")
+
+    source = tmp_path / "assay-source.pdf"
+    source.write_bytes(b"%PDF-1.4\npublic Acervo seam\n%%EOF\n")
 
     monkeypatch.setattr(server, "ACERVO_IMPORT_ENABLED", True)
-    monkeypatch.setattr(server, "_issue_source", issue)
+    monkeypatch.setattr(server, "UPLOAD_ROOT", tmp_path.resolve())
     text = run(
         call(
             server.tool_ingest_v2,
             handler,
             {
-                "file_path": "/approved/source.pdf",
+                "file_path": str(source),
                 "reviewed_ficha_repository_commit": "1" * 40,
                 "reviewed_ficha_path": "03-research/evidence/source.md",
             },
@@ -268,52 +278,26 @@ def test_acervo_import_workflow_issues_then_queues_without_caller_identity(
     )
 
     assert admission["source_receipt_id"] in text
-    assert sealed_response["job_id"] in text
-    sent = json.loads(calls[0].content)
-    assert sent["source_receipt_id"] == admission["source_receipt_id"]
-    assert sent["upload_id"] == admission["upload_id"]
-    assert sent["source_sha256"] == admission["source_sha256"]
-    assert "principal_id" not in {key for key in sent if key != "auth"}
+    assert queued["job_id"] in text
+    assert current["job_state"] in text
+    assert [request.url.path for request in calls] == [
+        server.SOURCE_ADMIT_PATH,
+        server.V2_INGEST_ASYNC_PATH,
+        queued["status_url"],
+    ]
+    assert [request.method for request in calls] == ["POST", "POST", "GET"]
 
-
-def test_cancelled_acervo_import_kills_and_reaps_the_issuer(monkeypatch):
-    class HeldIssuer:
-        returncode = None
-
-        def __init__(self):
-            self.started = asyncio.Event()
-            self.killed = False
-            self.waited = False
-
-        async def communicate(self):
-            self.started.set()
-            await asyncio.Event().wait()
-
-        def kill(self):
-            self.killed = True
-            self.returncode = -9
-
-        async def wait(self):
-            self.waited = True
-            return self.returncode
-
-    async def exercise():
-        issuer = HeldIssuer()
-
-        async def create(*_args, **_kwargs):
-            return issuer
-
-        monkeypatch.setattr(asyncio, "create_subprocess_exec", create)
-        task = asyncio.create_task(server._issue_source({}))
-        await issuer.started.wait()
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        return issuer
-
-    issuer = run(exercise())
-    assert issuer.killed is True
-    assert issuer.waited is True
+    admitted_request = json.loads(calls[0].content)
+    assert admitted_request["schema_version"] == "2.2.0"
+    assert admitted_request["original_filename"] == source.name
+    assert admitted_request["source_base64"]
+    assert "principal_id" not in {
+        key for key in admitted_request if key != "auth"
+    }
+    queued_request = json.loads(calls[1].content)
+    assert queued_request["schema_version"] == "2.2.0"
+    assert queued_request["source_receipt_id"] == admission["source_receipt_id"]
+    assert queued_request["upload_id"] == admission["upload_id"]
 
 
 def test_acervo_import_tool_is_absent_without_managed_service_identity():

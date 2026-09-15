@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2.2/knowledge-search-v2-response.schema.json",
+  "title": "knowledge_search_v2 response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "document_id",
+    "document_version",
+    "query",
+    "evidence_units"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.2.0"
+    },
+    "document_id": {
+      "type": "string",
+      "pattern": "^doc_[A-Za-z0-9_-]{16,128}$"
+    },
+    "document_version": {
+      "type": "string",
+      "pattern": "^ver_[a-f0-9]{64}$"
+    },
+    "query": {
+      "type": "string"
+    },
+    "evidence_units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "document_id",
+          "document_version",
+          "item_type",
+          "section_path",
+          "page_index",
+          "bounding_box",
+          "source_caption",
+          "original_filename",
+          "content",
+          "asset_present",
+          "trust_domain"
+        ],
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "pattern": "^doc_[A-Za-z0-9_-]{16,128}$"
+          },
+          "document_version": {
+            "type": "string",
+            "pattern": "^ver_[a-f0-9]{64}$"
+          },
+          "item_type": {
+            "enum": [
+              "text",
+              "table",
+              "figure",
+              "caption",
+              "process"
+            ]
+          },
+          "section_path": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "page_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bounding_box": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "origin",
+              "units",
+              "left",
+              "top",
+              "right",
+              "bottom",
+              "page_width",
+              "page_height"
+            ],
+            "properties": {
+              "origin": {
+                "const": "top-left"
+              },
+              "units": {
+                "const": "points"
+              },
+              "left": {
+                "type": "number",
+                "minimum": 0
+              },
+              "top": {
+                "type": "number",
+                "minimum": 0
+              },
+              "right": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "bottom": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "page_width": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "page_height": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          },
+          "source_caption": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "asset_present": {
+            "type": "boolean"
+          },
+          "asset_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "trust_domain": {
+            "const": "external_source_untrusted"
+          },
+          "original_filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$"
+          }
+        }
+      }
+    }
+  }
+}

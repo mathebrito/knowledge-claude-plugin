@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2.2/nip98-auth-contract.schema.json",
+  "title": "Knowledge v2 NIP-98 request authentication contract",
+  "contract_version": "2.2.0",
+  "x-contract": {
+    "nip98_kind": 27235,
+    "method_url_binding": "event-method-and-url-tags-must-equal-the-server-request",
+    "timestamp": {
+      "max_age_seconds": 60,
+      "max_future_skew_seconds": 60,
+      "valid_until": "authorization.expires_at"
+    },
+    "payload": {
+      "canonicalization": "rfc8785-json-excluding-auth",
+      "hash": "sha256"
+    },
+    "collection": {
+      "allowlist": [
+        "nanolime"
+      ],
+      "client_selector_accepted": false
+    },
+    "principal": {
+      "allowlist": "server-configured-nostr-public-keys"
+    },
+    "replay": {
+      "event_id_store_key": "event_id",
+      "retain_event_id_until": "authorization.expires_at"
+    },
+    "authorization": {
+      "cross_principal": "sanitized-not-found",
+      "cross_collection": "sanitized-not-found"
+    },
+    "quota_refusal": "before-action",
+    "rejection_order": [
+      "malformed-or-signature",
+      "method-url-or-payload-binding",
+      "timestamp-window",
+      "principal-or-collection-allowlist",
+      "event_id_replay",
+      "quota",
+      "action"
+    ]
+  },
+  "$defs": {
+    "request_authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "principal_id",
+        "method",
+        "url",
+        "created_at",
+        "expires_at",
+        "payload_canonicalization",
+        "payload_sha256",
+        "collection"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "principal_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "method": {
+          "const": "POST"
+        },
+        "url": {
+          "enum": [
+            "/v2/knowledge_ingest_async",
+            "/v2/knowledge_ingest_status",
+            "/v2/knowledge_search_v2"
+          ]
+        },
+        "created_at": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expires_at": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "payload_canonicalization": {
+          "const": "rfc8785-json-excluding-auth"
+        },
+        "payload_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "collection": {
+          "const": "nanolime"
+        }
+      }
+    }
+  }
+}

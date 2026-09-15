@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2.2/knowledge-ingest-async-response.schema.json",
+  "title": "knowledge_ingest_async response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "job_id",
+    "document_id",
+    "accepted_at",
+    "source_sha256",
+    "status_url"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.2.0"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^job_[A-Za-z0-9_-]{16,128}$"
+    },
+    "document_id": {
+      "type": "string",
+      "pattern": "^doc_[A-Za-z0-9_-]{16,128}$"
+    },
+    "accepted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "status_url": {
+      "type": "string",
+      "pattern": "^/v2/jobs/job_[A-Za-z0-9_-]{16,128}$"
+    }
+  }
+}

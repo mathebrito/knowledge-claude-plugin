@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/source-admission/v2.2/request.schema.json",
+  "title": "Acervo source upload and receipt admission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_base64",
+    "original_filename",
+    "content_type",
+    "reviewed_ficha",
+    "lawful_use_decision",
+    "auth"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.2.0"
+    },
+    "source_base64": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 69905068
+    },
+    "content_type": {
+      "const": "application/pdf"
+    },
+    "reviewed_ficha": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_commit",
+        "path",
+        "linkage_state"
+      ],
+      "properties": {
+        "repository_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "linkage_state": {
+          "enum": [
+            "reviewed",
+            "pending_canonical_evidence"
+          ]
+        }
+      }
+    },
+    "lawful_use_decision": {
+      "enum": [
+        "approved",
+        "approved-with-retention-condition"
+      ]
+    },
+    "auth": {
+      "$ref": "https://schemas.bioredox.bio/knowledge/source-admission/v2.2/auth.schema.json"
+    },
+    "original_filename": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$"
+    }
+  }
+}

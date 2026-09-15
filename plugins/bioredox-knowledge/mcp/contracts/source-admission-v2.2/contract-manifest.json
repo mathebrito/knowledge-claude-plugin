@@ -1,0 +1,15 @@
+{
+  "contract_version": "2.2.0",
+  "status": "candidate",
+  "supersedes": "source-admission-v1",
+  "consumed_by_code": true,
+  "approval_state": "source-candidate-unqualified",
+  "immutability_rule": "new-version-directory-required",
+  "artifacts": {
+    "fixtures/source-admission-request.json": "626cbb69fd67c1f24e51d7ab17a999acbf1779f2ebf1263cf3e07b0a4f007801",
+    "fixtures/source-admission-response.json": "9e2537aaa3cffc3e8b42cc9f594c6ab5bc6745e549156e59ca268c9cd1b59815",
+    "schemas/source-admission-auth.schema.json": "8632e6dcd71e622731d7d82e67b42b8dcd48d9ac7ca2c44d1b7680f210ff70f4",
+    "schemas/source-admission-request.schema.json": "64cda487ef73c13564ef364e31ab3889646e4d3c447cb04cc44f8f951fe955c2",
+    "schemas/source-admission-response.schema.json": "7c1dbc527b0fe55f9d4209abb63b8292ff49d1589465d1225f70bf2923b6d502"
+  }
+}

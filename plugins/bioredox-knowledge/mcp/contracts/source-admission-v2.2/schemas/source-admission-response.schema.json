@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/source-admission/v2.2/response.schema.json",
+  "title": "Immutable source admission response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_receipt_id",
+    "upload_id",
+    "source_sha256",
+    "original_filename",
+    "content_type"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "2.2.0"
+    },
+    "source_receipt_id": {
+      "type": "string",
+      "pattern": "^sr_[A-Za-z0-9_-]{16,128}$"
+    },
+    "upload_id": {
+      "type": "string",
+      "pattern": "^upl_[A-Za-z0-9_-]{16,128}$"
+    },
+    "source_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "content_type": {
+      "const": "application/pdf"
+    },
+    "original_filename": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$"
+    }
+  }
+}

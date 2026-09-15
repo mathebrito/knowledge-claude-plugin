@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import mimetypes
@@ -187,15 +188,7 @@ TOOLS = [
 V2_INGEST_ASYNC_PATH = "/v2/knowledge_ingest_async"
 V2_INGEST_STATUS_PATH = "/v2/knowledge_ingest_status"
 V2_SEARCH_PATH = "/v2/knowledge_search_v2"
-SOURCE_ISSUER_ROOT = Path(
-    os.getenv("KNOWLEDGE_SOURCE_ISSUER_ROOT", "/Users/tejo/src/tejo-infra")
-).expanduser()
-SOURCE_ISSUER_PYTHON = Path(
-    os.getenv(
-        "KNOWLEDGE_SOURCE_ISSUER_PYTHON",
-        "/Users/tejo/src/tejo-infra/knowledge/venv/bin/python3",
-    )
-).expanduser()
+SOURCE_ADMIT_PATH = "/v2/source_admit"
 ACERVO_IMPORT_ENABLED = bool(
     os.getenv("KNOWLEDGE_NIP98_IDENTITY_FILE", "").strip()
 ) and os.getenv("KNOWLEDGE_V2_IMPORT_ENABLED") == "1"
@@ -483,62 +476,88 @@ async def tool_ingest_async(client: httpx.AsyncClient, args: dict) -> str:
     )
 
 
-async def _issue_source(args: dict) -> dict:
-    argv = [
-        str(SOURCE_ISSUER_PYTHON),
-        "-m",
-        "knowledge.source_issuer",
-        "--source",
-        str(args.get("file_path", "")),
-        "--repository-commit",
-        str(args.get("reviewed_ficha_repository_commit", "")),
-        "--ficha-path",
-        str(args.get("reviewed_ficha_path", "")),
-        "--linkage-state",
-        str(args.get("reviewed_ficha_linkage_state", "pending_canonical_evidence")),
-        "--lawful-use-decision",
-        str(args.get("lawful_use_decision", "approved-with-retention-condition")),
-    ]
-    process = None
+async def _admit_source(client: httpx.AsyncClient, args: dict) -> dict:
+    """Upload one local PDF through the authenticated public admission route."""
     try:
-        process = await asyncio.create_subprocess_exec(
-            *argv,
-            cwd=SOURCE_ISSUER_ROOT,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _stderr = await asyncio.wait_for(process.communicate(), timeout=120)
-    except asyncio.TimeoutError as exc:
-        raise ToolExecutionError("The Acervo source import workflow is unavailable") from exc
+        path = Path(str(args.get("file_path", ""))).expanduser().resolve(strict=True)
+        path.relative_to(UPLOAD_ROOT)
+        if not path.is_file() or path.suffix.lower() != ".pdf":
+            raise OSError("source is not a PDF file")
+        if path.stat().st_size > MAX_UPLOAD_BYTES:
+            raise ToolExecutionError("Source exceeds the 50 MiB upload limit")
+        source = path.read_bytes()
+    except ValueError as exc:
+        raise ToolExecutionError(f"Source must be inside {UPLOAD_ROOT}") from exc
     except OSError as exc:
-        raise ToolExecutionError("The Acervo source import workflow is unavailable") from exc
-    finally:
-        # `communicate` can be interrupted by caller cancellation or fail after
-        # the issuer has started its Mongo write. Contain and reap the child on
-        # every unfinished exit; never leave an unobserved writer running.
-        if process is not None and process.returncode is None:
-            try:
-                process.kill()
-            except ProcessLookupError:
-                # It exited between the return-code check and the signal. It
-                # still needs `wait` below so the transport is reaped.
-                pass
-            await process.wait()
-    if process.returncode != 0:
-        raise ToolExecutionError("The Acervo source import workflow refused the source")
-    try:
-        admitted = json.loads(stdout)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ToolExecutionError("The Acervo source import workflow returned invalid data") from exc
-    required = {"source_receipt_id", "upload_id", "source_sha256", "content_type"}
-    if (
-        not isinstance(admitted, dict)
-        or admitted.get("status") != "issued"
-        or not required.issubset(admitted)
-        or admitted.get("content_type") != "application/pdf"
-    ):
-        raise ToolExecutionError("The Acervo source import workflow returned invalid data")
+        raise ToolExecutionError("The Acervo source is not readable") from exc
+
+    payload = {
+        "schema_version": contract.CONTRACT_V22_VERSION,
+        "source_base64": base64.b64encode(source).decode("ascii"),
+        "original_filename": path.name,
+        "content_type": "application/pdf",
+        "reviewed_ficha": {
+            "repository_commit": args.get("reviewed_ficha_repository_commit"),
+            "path": args.get("reviewed_ficha_path"),
+            "linkage_state": args.get(
+                "reviewed_ficha_linkage_state", "pending_canonical_evidence"
+            ),
+        },
+        "lawful_use_decision": args.get(
+            "lawful_use_decision", "approved-with-retention-condition"
+        ),
+    }
+    auth, authorization = sign_v2_payload(SOURCE_ADMIT_PATH, payload)
+    body = dict(payload, auth=auth)
+    contract.validate_source_admission_v22(
+        contract.SOURCE_ADMISSION_REQUEST, body, "The request"
+    )
+    response = await _signed_request(
+        client,
+        "POST",
+        SOURCE_ADMIT_PATH,
+        json_body=body,
+        authorization=authorization,
+        timeout=120,
+    )
+    if response.status_code >= 400:
+        raise ToolExecutionError(_sanitized_failure(response))
+    admitted = response.json()
+    contract.validate_source_admission_v22(
+        contract.SOURCE_ADMISSION_RESPONSE,
+        admitted,
+        "The Knowledge API response",
+    )
     return admitted
+
+
+async def _queue_v22(client: httpx.AsyncClient, admitted: dict, args: dict) -> dict:
+    payload = {
+        "schema_version": contract.CONTRACT_V22_VERSION,
+        "source_receipt_id": admitted["source_receipt_id"],
+        "source_sha256": admitted["source_sha256"],
+        "content_type": admitted["content_type"],
+        "upload_id": admitted["upload_id"],
+    }
+    if args.get("replace_document_id"):
+        payload["replace_document_id"] = args["replace_document_id"]
+    auth, authorization = sign_v2_payload(V2_INGEST_ASYNC_PATH, payload)
+    body = dict(payload, auth=auth)
+    contract.validate_v22(contract.INGEST_ASYNC_REQUEST, body, "The request")
+    response = await _signed_request(
+        client,
+        "POST",
+        V2_INGEST_ASYNC_PATH,
+        json_body=body,
+        authorization=authorization,
+    )
+    if response.status_code >= 400:
+        raise ToolExecutionError(_sanitized_failure(response))
+    queued = response.json()
+    contract.validate_v22(
+        contract.INGEST_ASYNC_RESPONSE, queued, "The Knowledge API response"
+    )
+    return queued
 
 
 async def tool_ingest_v2(client: httpx.AsyncClient, args: dict) -> str:
@@ -546,25 +565,27 @@ async def tool_ingest_v2(client: httpx.AsyncClient, args: dict) -> str:
     _reject_caller_identity(args)
     if not ACERVO_IMPORT_ENABLED:
         raise ToolExecutionError("The Acervo source import workflow is unavailable")
-    admitted = await _issue_source(args)
-    queued = await tool_ingest_async(
-        client,
-        {
-            "source_receipt_id": admitted["source_receipt_id"],
-            "source_sha256": admitted["source_sha256"],
-            "upload_id": admitted["upload_id"],
-            **(
-                {"replace_document_id": args["replace_document_id"]}
-                if args.get("replace_document_id")
-                else {}
-            ),
-        },
+    admitted = await _admit_source(client, args)
+    queued = await _queue_v22(client, admitted, args)
+    _JOBS_BY_RECEIPT[admitted["source_receipt_id"]] = queued
+    status = await _signed_request(
+        client, "GET", queued["status_url"], timeout=30
+    )
+    if status.status_code >= 400:
+        raise ToolExecutionError(_sanitized_failure(status))
+    current = status.json()
+    contract.validate(
+        contract.INGEST_STATUS_RESPONSE, current, "The Knowledge API response"
     )
     return "\n".join(
         [
             f'Source receipt: {admitted["source_receipt_id"]}',
+            f'Original filename: {admitted["original_filename"]}',
             f'Upload: {admitted["upload_id"]}',
-            queued,
+            f'Job: {queued["job_id"]}',
+            f'Document: {queued["document_id"]}',
+            f'Status: {queued["status_url"]}',
+            f'Current state: {current["job_state"]}',
         ]
     )
 

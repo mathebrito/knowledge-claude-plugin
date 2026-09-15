@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/v2.2/source-receipt.schema.json",
+  "title": "Private immutable source receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receipt_id",
+    "status",
+    "reviewed_ficha",
+    "source",
+    "file_sha256",
+    "original_filename",
+    "lawful_use_decision",
+    "collection",
+    "authorized_principal",
+    "issued_at"
+  ],
+  "properties": {
+    "receipt_id": {
+      "type": "string",
+      "pattern": "^sr_[A-Za-z0-9_-]{16,128}$"
+    },
+    "status": {
+      "const": "immutable"
+    },
+    "reviewed_ficha": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_commit",
+        "path",
+        "linkage_state"
+      ],
+      "properties": {
+        "repository_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "linkage_state": {
+          "enum": [
+            "reviewed",
+            "pending_canonical_evidence"
+          ]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_class"
+      ],
+      "properties": {
+        "source_class": {
+          "enum": [
+            "lawful-local-pdf",
+            "reviewed-url"
+          ]
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "file_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "lawful_use_decision": {
+      "enum": [
+        "approved",
+        "approved-with-retention-condition"
+      ]
+    },
+    "collection": {
+      "const": "nanolime"
+    },
+    "authorized_principal": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "issued_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "original_filename": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$"
+    }
+  }
+}

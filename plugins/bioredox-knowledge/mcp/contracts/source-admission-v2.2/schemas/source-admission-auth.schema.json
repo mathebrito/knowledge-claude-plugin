@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.bioredox.bio/knowledge/source-admission/v2.2/auth.schema.json",
+  "title": "Authenticated Acervo source admission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "principal_id",
+    "method",
+    "url",
+    "created_at",
+    "expires_at",
+    "payload_canonicalization",
+    "payload_sha256",
+    "collection"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "principal_id": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "method": {
+      "const": "POST"
+    },
+    "url": {
+      "const": "/v2/source_admit"
+    },
+    "created_at": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "expires_at": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "payload_canonicalization": {
+      "const": "rfc8785-json-excluding-auth"
+    },
+    "payload_sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "collection": {
+      "const": "nanolime"
+    }
+  }
+}
